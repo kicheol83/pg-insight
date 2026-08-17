@@ -1,0 +1,169 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  role         String   @default("admin") // admin | viewer
+  createdAt    DateTime @default(now())
+  lastLoginAt  DateTime?
+
+  refreshTokens RefreshToken[]
+  targets       Target[]
+
+  @@map("users")
+}
+
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+
+model Target {
+  id                String    @id @default(uuid())
+  name              String                          // "Production DB", "Staging"
+  host              String                          // IP yoki hostname
+  port              Int       @default(5432)
+  database          String                          // database nomi
+  username          String
+  passwordEncrypted String                          // Encrypted parol
+  sslMode           String    @default("prefer")    // disable|allow|prefer|require|verify-ca|verify-full
+  sslCert           String?                         // SSL sertifikat (optional)
+
+
+  createdByUserId   String?
+  createdByUser     User?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  status            String    @default("connecting") // connecting|active|error|paused
+  errorMessage      String?
+  lastConnectedAt   DateTime?
+  lastCollectedAt   DateTime?
+
+  pgVersion         String?                        
+  pgVersionNum      Int?                            
+  hasStatStatements Boolean   @default(false)       
+  hasTimescaledb    Boolean   @default(false)       // TimescaleDB extension
+
+  // Collection intervals (ms) — per-target override possible
+  collectionIntervalMs Int    @default(5000)
+  slowQueryThresholdMs Int    @default(1000)
+
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  alertRules        AlertRule[]
+  alertEvents       AlertEvent[]
+  collectionLogs    CollectionLog[]
+  savedQueries      SavedQuery[]
+
+  @@map("targets")
+}
+
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?                         
+  userEmail  String?                          
+  action     String                          
+  targetId   String?                          
+  detail     String?                          
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([targetId, createdAt])
+  @@map("audit_logs")
+}
+
+
+model CollectionLog {
+  id           String   @id @default(uuid())
+  targetId     String
+  collectedAt  DateTime @default(now())
+  durationMs   Int                        
+  status       String                     
+  errorMessage String?
+  metricsCount Int      @default(0)       
+
+  target Target @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([targetId, collectedAt])
+  @@map("collection_logs")
+}
+
+
+model AlertRule {
+  id          String  @id @default(uuid())
+  targetId    String
+  name        String
+  description String?
+  metric      String
+  operator    String
+  threshold   Float
+  severity    String  @default("warning")  // info|warning|critical
+  cooldownMs  Int     @default(300000)     // 5 daqiqa default cooldown
+  enabled     Boolean @default(true)
+
+
+  notifyChannels String[] @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  target      Target       @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  alertEvents AlertEvent[]
+
+  @@map("alert_rules")
+}
+
+model AlertEvent {
+  id           String    @id @default(uuid())
+  targetId     String
+  ruleId       String
+  triggeredAt  DateTime  @default(now())
+  resolvedAt   DateTime?
+  currentValue Float                      
+  message      String?
+  acknowledged Boolean   @default(false) 
+
+  target Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  rule   AlertRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([targetId, triggeredAt])
+  @@map("alert_events")
+}
+
+
+model SavedQuery {
+  id          String   @id @default(uuid())
+  targetId    String
+  name        String
+  description String?
+  sql         String   @db.Text
+  tags        String[] @default([])
+  isPinned    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  target Target @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@map("saved_queries")
+}

@@ -1,0 +1,77 @@
+# ══════════════════════════════════════════════════════════════
+# docker-compose.yml — PG Insight local development stack
+#
+#   platform-db  — target'lar, alert qoidalari (oddiy Postgres)
+#   metrics-db   — collected time-series metrikalar (TimescaleDB)
+#   api          — NestJS backend
+#
+# Ishga tushirish: docker compose up -d
+# ══════════════════════════════════════════════════════════════
+
+services:
+  platform-db:
+    image: postgres:16-alpine
+    container_name: pg-insight-platform-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pg_insight_platform
+    ports:
+      - '5434:5432'
+    volumes:
+      - platform_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  metrics-db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: pg-insight-metrics-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pg_insight_metrics
+    ports:
+      - '5433:5432'
+    volumes:
+      - metrics_data:/var/lib/postgresql/data
+      - ./docker/init-platform.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pg-insight-api
+    restart: unless-stopped
+    depends_on:
+      platform-db:
+        condition: service_healthy
+      metrics-db:
+        condition: service_healthy
+    environment:
+      PLATFORM_DATABASE_URL: postgresql://postgres:postgres@platform-db:5432/pg_insight_platform
+      TIMESCALE_URL: postgresql://postgres:postgres@metrics-db:5432/pg_insight_metrics
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change-me-to-a-random-32-char-string}
+      JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-in-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      SWAGGER_USER: ${SWAGGER_USER:-}
+      SWAGGER_PASSWORD: ${SWAGGER_PASSWORD:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      PORT: 3000
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      NODE_ENV: production
+    ports:
+      - '3000:3000'
+
+volumes:
+  platform_data:
+  metrics_data:
