@@ -1,0 +1,984 @@
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { TargetPoolManager } from '../targets/target-pool.manager';
+
+@Injectable()
+export class LiveQueryService {
+  private readonly logger = new Logger(LiveQueryService.name);
+
+  constructor(private readonly poolManager: TargetPoolManager) {}
+
+  public async getConnections(
+    targetId: string,
+    minMs = 0,
+    limit = 200,
+    offset = 0,
+  ) {
+    const rows = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT
+        pid, usename AS username, application_name,
+        client_addr::text AS client_addr, datname AS db_name,
+        state, wait_event_type, wait_event,
+        EXTRACT(EPOCH FROM (now() - query_start))  * 1000 AS query_duration_ms,
+        EXTRACT(EPOCH FROM (now() - xact_start))   * 1000 AS xact_duration_ms,
+        query, backend_type
+      FROM pg_stat_activity
+      WHERE pid != pg_backend_pid()
+        AND datname IS NOT NULL
+        AND COALESCE(EXTRACT(EPOCH FROM (now() - query_start)) * 1000, 0) >= $1
+      ORDER BY query_duration_ms DESC NULLS LAST
+    `,
+      [minMs],
+    );
+
+    const sessions = rows.map((r) => ({
+      pid: Number(r.pid),
+      username: String(r.username ?? ''),
+      applicationName: String(r.application_name ?? ''),
+      clientAddr: r.client_addr ? String(r.client_addr) : null,
+      dbName: String(r.db_name ?? ''),
+      state: String(r.state ?? 'unknown'),
+      waitEventType: r.wait_event_type ? String(r.wait_event_type) : null,
+      waitEvent: r.wait_event ? String(r.wait_event) : null,
+      queryDurationMs: Math.round(Number(r.query_duration_ms) || 0),
+      xactDurationMs: Math.round(Number(r.xact_duration_ms) || 0),
+      query: r.query ? String(r.query) : null,
+      backendType: String(r.backend_type ?? ''),
+      isLongRunning: Number(r.query_duration_ms) > 30_000,
+      isIdleInTx: String(r.state).startsWith('idle in transaction'),
+      isWaitingForLock: r.wait_event_type === 'Lock',
+    }));
+
+    const maxConnResult = await this.poolManager.query<{
+      max_connections: string;
+    }>(targetId, `SHOW max_connections`);
+    const maxConnections = parseInt(
+      maxConnResult[0]?.max_connections ?? '100',
+      10,
+    );
+
+    const byStateMap = new Map<string, number>();
+    const byWaitMap = new Map<
+      string,
+      { waitEventType: string; waitEvent: string | null; count: number }
+    >();
+    const byAppMap = new Map<string, number>();
+
+    for (const s of sessions) {
+      byStateMap.set(s.state, (byStateMap.get(s.state) ?? 0) + 1);
+      byAppMap.set(
+        s.applicationName || '(unknown)',
+        (byAppMap.get(s.applicationName || '(unknown)') ?? 0) + 1,
+      );
+      if (s.waitEventType) {
+        const key = `${s.waitEventType}:${s.waitEvent}`;
+        const existing = byWaitMap.get(key);
+        if (existing) existing.count++;
+        else
+          byWaitMap.set(key, {
+            waitEventType: s.waitEventType,
+            waitEvent: s.waitEvent,
+            count: 1,
+          });
+      }
+    }
+
+    const total = sessions.length;
+
+    const pagedSessions = sessions.slice(offset, offset + limit);
+    return {
+      totalConnections: total,
+      activeQueries: sessions.filter((s) => s.state === 'active').length,
+      idleConnections: sessions.filter((s) => s.state === 'idle').length,
+      idleInTransaction: sessions.filter((s) => s.isIdleInTx).length,
+      waitingForLock: sessions.filter((s) => s.isWaitingForLock).length,
+      maxConnections,
+      connectionUsagePct:
+        maxConnections > 0 ? (total / maxConnections) * 100 : 0,
+      longestQueryMs: Math.max(0, ...sessions.map((s) => s.queryDurationMs)),
+      longestIdleInTxMs: Math.max(
+        0,
+        ...sessions.filter((s) => s.isIdleInTx).map((s) => s.xactDurationMs),
+      ),
+      sessions: pagedSessions,
+      sessionsTotal: total,
+      sessionsOffset: offset,
+      byState: Array.from(byStateMap, ([state, count]) => ({ state, count })),
+      byWaitEvent: Array.from(byWaitMap.values()),
+      byApplication: Array.from(byAppMap, ([applicationName, count]) => ({
+        applicationName,
+        count,
+      })).sort((a, b) => b.count - a.count),
+    };
+  }
+
+  public async getSlowQueries(targetId: string, limit = 50, offset = 0) {
+    const entry = this.poolManager.getEntry(targetId);
+    if (!entry?.hasStatStatements) {
+      return {
+        queries: [],
+        count: 0,
+        total: 0,
+        message: 'pg_stat_statements extension not installed',
+      };
+    }
+
+    const totalRows = await this.poolManager.query<{ total: string }>(
+      targetId,
+      `
+      SELECT count(*) AS total FROM pg_stat_statements
+      WHERE query NOT ILIKE '%pg_stat_statements%'
+    `,
+    );
+    const total = Number(totalRows[0]?.total) || 0;
+
+    const rows = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT
+        queryid::text AS query_id, query AS query_text, calls,
+        total_exec_time AS total_time_ms, mean_exec_time AS mean_time_ms,
+        max_exec_time AS max_time_ms, stddev_exec_time AS stddev_time_ms,
+        CASE WHEN calls > 0 THEN rows::float / calls ELSE 0 END AS rows_per_call,
+        CASE WHEN (shared_blks_hit + shared_blks_read) > 0
+          THEN shared_blks_hit::float / (shared_blks_hit + shared_blks_read)
+          ELSE 1 END AS cache_hit_ratio
+      FROM pg_stat_statements
+      WHERE query NOT ILIKE '%pg_stat_statements%'
+      ORDER BY mean_exec_time DESC
+      LIMIT $1 OFFSET $2
+    `,
+      [limit, offset],
+    );
+
+    const queries = rows.map((r) => {
+      const meanMs = Number(r.mean_time_ms) || 0;
+      const maxMs = Number(r.max_time_ms) || 0;
+      const stddevMs = Number(r.stddev_time_ms) || 0;
+      const calls = Number(r.calls) || 0;
+      const cacheHit = Number(r.cache_hit_ratio) || 0;
+      const rowsPerCall = Number(r.rows_per_call) || 0;
+
+      const tags: string[] = [];
+      if (meanMs > 10_000) tags.push('very-slow');
+      else if (meanMs > 1_000) tags.push('slow');
+      if (stddevMs > meanMs * 2 && calls > 10) tags.push('inconsistent');
+      if (cacheHit < 0.9) tags.push('low-cache');
+      if (rowsPerCall > 10_000) tags.push('high-rows');
+      if (calls > 10_000) tags.push('frequent');
+      if (/^\s*(insert|update|delete)/i.test(String(r.query_text)))
+        tags.push('write-heavy');
+
+      return {
+        queryId: r.query_id,
+        queryText: r.query_text,
+        calls,
+        totalTimeMs: Number(r.total_time_ms) || 0,
+        meanTimeMs: meanMs,
+        maxTimeMs: maxMs,
+        stddevTimeMs: stddevMs,
+        rowsPerCall,
+        cacheHitRatio: cacheHit,
+        tags,
+        isSlow: meanMs > 1_000,
+        isFrequent: calls > 10_000,
+      };
+    });
+
+    return { queries, count: queries.length, total, offset };
+  }
+
+  async explainQuery(targetId: string, sql: string) {
+    const withoutComments = sql
+      .replace(/--.*$/gm, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .trim();
+
+    const trimmed = withoutComments.replace(/;+\s*$/, '');
+
+    if (trimmed.includes(';')) {
+      throw new BadRequestException('Multiple statements are not allowed');
+    }
+
+    if (!/^\s*(select|with)\b/i.test(trimmed)) {
+      throw new BadRequestException(
+        'Only SELECT / WITH queries can be explained',
+      );
+    }
+
+    if (
+      /\b(insert|update|delete|drop|truncate|alter|grant|revoke|create|call|do|copy|vacuum|reindex)\b/i.test(
+        trimmed,
+      )
+    ) {
+      throw new BadRequestException('Query contains forbidden keywords');
+    }
+
+    const pool = this.poolManager.getPool(targetId);
+    if (!pool) throw new BadRequestException('Target is not connected');
+
+    const client = await pool.connect();
+    const start = Date.now();
+    try {
+      await client.query('BEGIN TRANSACTION READ ONLY');
+      const result = await client.query<{ 'QUERY PLAN': unknown }>(
+        `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${trimmed}`,
+      );
+      await client.query('ROLLBACK'); // READ ONLY bo'lsa ham hech narsani commit qilmaymiz
+      const executionTimeMs = Date.now() - start;
+      const plan = (result.rows[0] as unknown as Record<string, unknown>)[
+        'QUERY PLAN'
+      ];
+
+      const recommendations: string[] = [];
+      const planStr = JSON.stringify(plan);
+      if (planStr.includes('Seq Scan')) {
+        recommendations.push(
+          '⚠ Sequential scan detected — consider adding an index on the filtered column',
+        );
+      }
+      if (planStr.includes('"Rows Removed by Filter"')) {
+        recommendations.push(
+          'Query filters rows after fetching — an index could filter earlier',
+        );
+      }
+      if (executionTimeMs > 1000) {
+        recommendations.push(
+          'Execution took over 1s — review join order and index usage',
+        );
+      }
+
+      return { plan: [plan], executionTimeMs, recommendations };
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {}
+      const message = (error as Error).message ?? '';
+      if (/read-only transaction/i.test(message)) {
+        throw new BadRequestException(
+          'Query attempted a write operation — only read-only queries are allowed',
+        );
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  public async cancelQuery(targetId: string, pid: number) {
+    await this.poolManager.query(targetId, `SELECT pg_cancel_backend($1)`, [
+      pid,
+    ]);
+    return { cancelled: true, pid };
+  }
+
+  public async getAllLocks(targetId: string) {
+    const rows = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT l.mode, l.granted, count(*) AS cnt
+      FROM pg_locks l
+      WHERE l.pid != pg_backend_pid()
+      GROUP BY l.mode, l.granted
+    `,
+    );
+
+    const byMode: Record<string, number> = {};
+    let totalLocks = 0,
+      waitingLocks = 0,
+      grantedLocks = 0;
+    for (const r of rows) {
+      const cnt = Number(r.cnt);
+      totalLocks += cnt;
+      if (r.granted) grantedLocks += cnt;
+      else waitingLocks += cnt;
+      byMode[String(r.mode)] = (byMode[String(r.mode)] ?? 0) + cnt;
+    }
+
+    const deadlockResult = await this.poolManager.query<{ deadlocks: string }>(
+      targetId,
+      `
+      SELECT deadlocks FROM pg_stat_database WHERE datname = current_database()
+    `,
+    );
+
+    return {
+      totalLocks,
+      waitingLocks,
+      grantedLocks,
+      hasBlockers: waitingLocks > 0,
+      hasDeadlockRisk: waitingLocks > 5,
+      deadlocksTotal: Number(deadlockResult[0]?.deadlocks) || 0,
+      byMode,
+    };
+  }
+
+  public async getLockChains(targetId: string) {
+    const rows = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT
+        blocking.pid AS blocker_pid,
+        blocking_act.usename AS blocker_username,
+        blocking_act.application_name AS blocker_app,
+        blocking_act.query AS blocker_query,
+        EXTRACT(EPOCH FROM (now() - blocking_act.query_start)) * 1000 AS blocker_query_ms,
+        blocking_act.state AS blocker_state,
+        waiting.pid AS waiter_pid,
+        waiting_act.usename AS waiter_username,
+        waiting_act.application_name AS waiter_app,
+        waiting_act.query AS waiter_query,
+        EXTRACT(EPOCH FROM (now() - waiting.waitstart)) * 1000 AS wait_ms,
+        waiting.mode AS lock_mode,
+        waiting.relation::regclass::text AS locked_relation
+      FROM pg_locks waiting
+      JOIN pg_stat_activity waiting_act ON waiting_act.pid = waiting.pid
+      JOIN pg_locks blocking ON (
+        blocking.locktype = waiting.locktype AND
+        blocking.database IS NOT DISTINCT FROM waiting.database AND
+        blocking.relation IS NOT DISTINCT FROM waiting.relation AND
+        blocking.page IS NOT DISTINCT FROM waiting.page AND
+        blocking.tuple IS NOT DISTINCT FROM waiting.tuple AND
+        blocking.pid != waiting.pid AND blocking.granted
+      )
+      JOIN pg_stat_activity blocking_act ON blocking_act.pid = blocking.pid
+      WHERE NOT waiting.granted
+      ORDER BY wait_ms DESC NULLS LAST
+    `,
+    );
+
+    const chainsMap = new Map<
+      number,
+      {
+        blockerPid: number;
+        blockerUsername: string;
+        blockerApp: string;
+        blockerQuery: string;
+        blockerQueryMs: number;
+        blockerState: string;
+        waiters: Array<{
+          waiterPid: number;
+          waiterUsername: string;
+          waiterApp: string;
+          waiterQuery: string;
+          waitMs: number;
+          lockMode: string;
+          relation?: string;
+        }>;
+        lockedRelation?: string;
+        lockMode: string;
+      }
+    >();
+
+    for (const r of rows) {
+      const blockerPid = Number(r.blocker_pid);
+      if (!chainsMap.has(blockerPid)) {
+        chainsMap.set(blockerPid, {
+          blockerPid,
+          blockerUsername: String(r.blocker_username),
+          blockerApp: String(r.blocker_app ?? ''),
+          blockerQuery: String(r.blocker_query ?? ''),
+          blockerQueryMs: Math.round(Number(r.blocker_query_ms) || 0),
+          blockerState: String(r.blocker_state),
+          waiters: [],
+          lockedRelation: r.locked_relation
+            ? String(r.locked_relation)
+            : undefined,
+          lockMode: String(r.lock_mode),
+        });
+      }
+      chainsMap.get(blockerPid)!.waiters.push({
+        waiterPid: Number(r.waiter_pid),
+        waiterUsername: String(r.waiter_username),
+        waiterApp: String(r.waiter_app ?? ''),
+        waiterQuery: String(r.waiter_query ?? ''),
+        waitMs: Math.round(Number(r.wait_ms) || 0),
+        lockMode: String(r.lock_mode),
+        relation: r.locked_relation ? String(r.locked_relation) : undefined,
+      });
+    }
+
+    const chains = Array.from(chainsMap.values()).map((c) => {
+      const maxWaitMs = Math.max(0, ...c.waiters.map((w) => w.waitMs));
+      const severity =
+        maxWaitMs > 60_000 || c.waiters.length > 5
+          ? 'critical'
+          : maxWaitMs > 10_000 || c.waiters.length > 2
+            ? 'high'
+            : 'warning';
+      return { ...c, severity };
+    });
+
+    return {
+      count: chains.length,
+      hasCritical: chains.some((c) => c.severity === 'critical'),
+      chains,
+    };
+  }
+
+  public async getTableStats(targetId: string) {
+    const tableRows = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT
+        schemaname AS schema_name, relname AS table_name,
+        n_live_tup AS live_tuples, n_dead_tup AS dead_tuples,
+        CASE WHEN n_live_tup > 0
+          THEN n_dead_tup::float / (n_live_tup + n_dead_tup) ELSE 0 END AS bloat_ratio,
+        seq_scan AS seq_scans, idx_scan AS idx_scans,
+        CASE WHEN (seq_scan + COALESCE(idx_scan,0)) > 0
+          THEN seq_scan::float / (seq_scan + COALESCE(idx_scan,0)) ELSE 0 END AS seq_scan_ratio,
+        pg_table_size(relid) AS table_size_bytes,
+        pg_indexes_size(relid) AS index_size_bytes,
+        pg_total_relation_size(relid) AS total_size_bytes,
+        last_vacuum, last_autovacuum
+      FROM pg_stat_user_tables
+      ORDER BY total_size_bytes DESC
+      LIMIT 200
+    `,
+    );
+
+    const vacuumOffRows = await this.poolManager.query<{ relname: string }>(
+      targetId,
+      `
+      SELECT c.relname FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog','information_schema')
+        AND c.reloptions IS NOT NULL
+        AND array_to_string(c.reloptions, ',') LIKE '%autovacuum_enabled=false%'
+    `,
+    );
+    const vacuumOffSet = new Set(vacuumOffRows.map((r) => r.relname));
+
+    const tables = tableRows.map((r) => {
+      const bloatRatio = Number(r.bloat_ratio) || 0;
+      const seqScanRatio = Number(r.seq_scan_ratio) || 0;
+      const seqScans = Number(r.seq_scans) || 0;
+      return {
+        schemaName: String(r.schema_name),
+        tableName: String(r.table_name),
+        liveTuples: Number(r.live_tuples) || 0,
+        deadTuples: Number(r.dead_tuples) || 0,
+        bloatRatio,
+        seqScans,
+        idxScans: Number(r.idx_scans) || 0,
+        seqScanRatio,
+        tableSizeBytes: Number(r.table_size_bytes) || 0,
+        indexSizeBytes: Number(r.index_size_bytes) || 0,
+        totalSizeBytes: Number(r.total_size_bytes) || 0,
+        lastVacuum: r.last_vacuum,
+        lastAutovacuum: r.last_autovacuum,
+        needsVacuum: bloatRatio > 0.2,
+        needsIndex: seqScanRatio > 0.5 && seqScans > 100,
+        hasVacuumDisabled: vacuumOffSet.has(String(r.table_name)),
+      };
+    });
+
+    const indexRows = await this.poolManager
+      .query<Record<string, unknown>>(
+        targetId,
+        `
+      SELECT
+        schemaname AS schema_name, relname AS table_name, indexrelname AS index_name,
+        pg_relation_size(indexrelid) AS index_size_bytes, idx_scan AS idx_scans,
+        indexdef AS index_def
+      FROM pg_stat_user_indexes
+      JOIN pg_index USING (indexrelid)
+      ORDER BY index_size_bytes DESC
+      LIMIT 300
+    `.replace(
+          'indexdef AS index_def',
+          `(SELECT indexdef FROM pg_indexes WHERE indexname = indexrelname LIMIT 1) AS index_def`,
+        ),
+      )
+      .catch(async () =>
+        this.poolManager.query<Record<string, unknown>>(
+          targetId,
+          `
+        SELECT
+          s.schemaname AS schema_name, s.relname AS table_name, s.indexrelname AS index_name,
+          pg_relation_size(s.indexrelid) AS index_size_bytes, s.idx_scan AS idx_scans,
+          i.indexdef AS index_def, ix.indisunique AS is_unique, ix.indisprimary AS is_primary
+        FROM pg_stat_user_indexes s
+        JOIN pg_indexes i ON i.indexname = s.indexrelname AND i.schemaname = s.schemaname
+        JOIN pg_index ix ON ix.indexrelid = s.indexrelid
+        ORDER BY index_size_bytes DESC
+        LIMIT 300
+      `,
+        ),
+      );
+
+    const indexes = indexRows.map((r) => {
+      const def = String(r.index_def ?? '');
+      const colMatch = def.match(/\(([^)]+)\)/);
+      return {
+        schemaName: String(r.schema_name),
+        tableName: String(r.table_name),
+        indexName: String(r.index_name),
+        indexSizeBytes: Number(r.index_size_bytes) || 0,
+        idxScans: Number(r.idx_scans) || 0,
+        isUnused: (Number(r.idx_scans) || 0) === 0,
+        isUnique: Boolean(r.is_unique) || def.includes('UNIQUE'),
+        isPrimary:
+          Boolean(r.is_primary) || String(r.index_name).endsWith('_pkey'),
+        indexDef: def,
+        columns: colMatch ? colMatch[1].split(',').map((c) => c.trim()) : [],
+      };
+    });
+
+    const totalTableSizeBytes = tables.reduce(
+      (s, t) => s + t.tableSizeBytes,
+      0,
+    );
+    const totalIndexSizeBytes = tables.reduce(
+      (s, t) => s + t.indexSizeBytes,
+      0,
+    );
+    const unusedIndexes = indexes.filter((i) => i.isUnused && !i.isPrimary);
+
+    const recommendations: Array<{
+      type: string;
+      severity: string;
+      targetName: string;
+      message: string;
+      command: string;
+    }> = [];
+    for (const t of tables.filter((t) => t.needsVacuum).slice(0, 5)) {
+      recommendations.push({
+        type: 'vacuum',
+        severity: t.bloatRatio > 0.4 ? 'critical' : 'warning',
+        targetName: `${t.schemaName}.${t.tableName}`,
+        message: `${t.tableName} has ${(t.bloatRatio * 100).toFixed(0)}% dead tuple bloat`,
+        command: `VACUUM (ANALYZE) ${t.schemaName}.${t.tableName};`,
+      });
+    }
+    for (const i of unusedIndexes.slice(0, 5)) {
+      recommendations.push({
+        type: 'unused_index',
+        severity: 'info',
+        targetName: `${i.schemaName}.${i.indexName}`,
+        message: `Index ${i.indexName} has never been used and wastes disk space`,
+        command: `DROP INDEX CONCURRENTLY ${i.schemaName}.${i.indexName};`,
+      });
+    }
+    for (const t of tables.filter((t) => t.needsIndex).slice(0, 5)) {
+      recommendations.push({
+        type: 'missing_index',
+        severity: 'warning',
+        targetName: `${t.schemaName}.${t.tableName}`,
+        message: `${t.tableName} is scanned sequentially ${(t.seqScanRatio * 100).toFixed(0)}% of the time`,
+        command: `-- Review WHERE clauses on ${t.tableName} and add a matching index`,
+      });
+    }
+
+    return {
+      tables,
+      indexes,
+      totalTableSizeBytes,
+      totalIndexSizeBytes,
+      tablesNeedingVacuum: tables.filter((t) => t.needsVacuum).length,
+      unusedIndexCount: unusedIndexes.length,
+      unusedIndexSizeBytes: unusedIndexes.reduce(
+        (s, i) => s + i.indexSizeBytes,
+        0,
+      ),
+      recommendations,
+    };
+  }
+
+  public async getVacuumProgress(targetId: string) {
+    const activeRows = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT
+        p.pid, c.relname AS table_name, n.nspname AS schema_name,
+        p.phase, p.heap_blks_total, p.heap_blks_scanned,
+        a.query ILIKE 'autovacuum%' AS is_autovacuum
+      FROM pg_stat_progress_vacuum p
+      JOIN pg_class c ON c.oid = p.relid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_stat_activity a ON a.pid = p.pid
+    `,
+    );
+
+    const activeVacuums = activeRows.map((r) => {
+      const total = Number(r.heap_blks_total) || 0;
+      const scanned = Number(r.heap_blks_scanned) || 0;
+      return {
+        pid: Number(r.pid),
+        tableName: String(r.table_name),
+        schemaName: String(r.schema_name),
+        phase: String(r.phase),
+        heapBlksTotal: total,
+        heapBlksScanned: scanned,
+        progressPct: total > 0 ? (scanned / total) * 100 : 0,
+        isAutovacuum: Boolean(r.is_autovacuum),
+      };
+    });
+
+    const xidRows = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT n.nspname AS schema_name, c.relname AS table_name,
+        age(c.relfrozenxid) AS age
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relkind IN ('r','m') AND n.nspname NOT IN ('pg_catalog','information_schema')
+      ORDER BY age DESC LIMIT 20
+    `,
+    );
+
+    const xidAgeRisk = xidRows
+      .map((r) => {
+        const age = Number(r.age) || 0;
+        const ageStatus =
+          age >= 1_500_000_000
+            ? 'emergency'
+            : age >= 500_000_000
+              ? 'critical'
+              : 'warning';
+        return {
+          schemaName: String(r.schema_name),
+          tableName: String(r.table_name),
+          age,
+          ageStatus,
+        };
+      })
+      .filter((t) => t.age >= 200_000_000);
+
+    const dbAgeRows = await this.poolManager.query<{ age: string }>(
+      targetId,
+      `
+      SELECT age(datfrozenxid) AS age FROM pg_database WHERE datname = current_database()
+    `,
+    );
+    const databaseAge = Number(dbAgeRows[0]?.age) || 0;
+    const maxXidAge = Math.max(databaseAge, ...xidAgeRisk.map((t) => t.age), 0);
+
+    const settingsRows = await this.poolManager.query<{
+      name: string;
+      setting: string;
+    }>(
+      targetId,
+      `
+      SELECT name, setting FROM pg_settings
+      WHERE name IN ('autovacuum','autovacuum_max_workers','vacuum_freeze_table_age','autovacuum_freeze_max_age')
+    `,
+    );
+    const settingsMap = new Map(settingsRows.map((r) => [r.name, r.setting]));
+
+    const workerRows = await this.poolManager.query<{ cnt: string }>(
+      targetId,
+      `
+      SELECT count(*) AS cnt FROM pg_stat_activity WHERE query ILIKE 'autovacuum%'
+    `,
+    );
+
+    return {
+      activeVacuums,
+      xidAgeRisk,
+      maxXidAge,
+      databaseAge,
+      hasXidRisk: maxXidAge >= 500_000_000,
+      autovacuum: {
+        activeWorkers: Number(workerRows[0]?.cnt) || 0,
+        maxWorkers: Number(settingsMap.get('autovacuum_max_workers')) || 3,
+        tablesPendingVacuum: 0,
+        tablesPendingAnalyze: 0,
+      },
+      settings: {
+        autovacuumEnabled: settingsMap.get('autovacuum') === 'on',
+        autovacuumMaxWorkers:
+          Number(settingsMap.get('autovacuum_max_workers')) || 3,
+        vacuumFreezeMaxAge:
+          Number(settingsMap.get('vacuum_freeze_table_age')) || 150_000_000,
+        autovacuumFreezeMaxAge:
+          Number(settingsMap.get('autovacuum_freeze_max_age')) || 200_000_000,
+      },
+    };
+  }
+
+  public async getReplication(targetId: string) {
+    const recoveryRows = await this.poolManager.query<{ is_recovery: boolean }>(
+      targetId,
+      `SELECT pg_is_in_recovery() AS is_recovery`,
+    );
+    const isPrimary = !recoveryRows[0]?.is_recovery;
+
+    const walSizeRows = await this.poolManager
+      .query<{ size: string }>(
+        targetId,
+        `SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0') AS size`,
+      )
+      .catch(() => [{ size: '0' }]);
+
+    let replicas: Record<string, unknown>[] = [];
+    if (isPrimary) {
+      replicas = await this.poolManager.query<Record<string, unknown>>(
+        targetId,
+        `
+        SELECT
+          pid, client_addr::text AS client_addr, application_name, state, sync_state,
+          pg_wal_lsn_diff(sent_lsn, write_lsn) AS write_lag_bytes,
+          pg_wal_lsn_diff(sent_lsn, flush_lsn) AS flush_lag_bytes,
+          pg_wal_lsn_diff(sent_lsn, replay_lsn) AS replay_lag_bytes,
+          EXTRACT(EPOCH FROM write_lag) * 1000 AS write_lag_ms,
+          EXTRACT(EPOCH FROM flush_lag) * 1000 AS flush_lag_ms,
+          EXTRACT(EPOCH FROM replay_lag) * 1000 AS replay_lag_ms,
+          reply_time
+        FROM pg_stat_replication
+      `,
+      );
+    }
+
+    const replicaInfos = replicas.map((r) => ({
+      pid: Number(r.pid),
+      clientAddr: String(r.client_addr ?? ''),
+      applicationName: String(r.application_name ?? ''),
+      state: String(r.state),
+      syncState: String(r.sync_state),
+      writeLagBytes: Number(r.write_lag_bytes) || 0,
+      flushLagBytes: Number(r.flush_lag_bytes) || 0,
+      replayLagBytes: Number(r.replay_lag_bytes) || 0,
+      totalLagBytes: Number(r.replay_lag_bytes) || 0,
+      writeLagMs: r.write_lag_ms != null ? Number(r.write_lag_ms) : null,
+      flushLagMs: r.flush_lag_ms != null ? Number(r.flush_lag_ms) : null,
+      replayLagMs: r.replay_lag_ms != null ? Number(r.replay_lag_ms) : null,
+      replyTime: r.reply_time,
+    }));
+
+    const slotRows = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT slot_name, slot_type, plugin, active, active_pid, database,
+        pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn) AS wal_bytes
+      FROM pg_replication_slots
+    `,
+    );
+    const slots = slotRows.map((r) => {
+      const walBytes = Number(r.wal_bytes) || 0;
+      return {
+        slotName: String(r.slot_name),
+        slotType: String(r.slot_type),
+        plugin: r.plugin ? String(r.plugin) : null,
+        active: Boolean(r.active),
+        activePid: r.active_pid ? Number(r.active_pid) : null,
+        walBytes,
+        isBlocking: walBytes > 1024 ** 3,
+        database: r.database ? String(r.database) : null,
+      };
+    });
+
+    let receiverInfo = null;
+    if (!isPrimary) {
+      const recvRows = await this.poolManager
+        .query<Record<string, unknown>>(
+          targetId,
+          `
+        SELECT status, received_lsn::text AS received_lsn,
+          EXTRACT(EPOCH FROM (now() - last_msg_receipt_time)) * 1000 AS latency_ms,
+          last_msg_receipt_time
+        FROM pg_stat_wal_receiver
+      `,
+        )
+        .catch(() => []);
+      if (recvRows[0]) {
+        receiverInfo = {
+          status: String(recvRows[0].status),
+          receivedLsn: recvRows[0].received_lsn
+            ? String(recvRows[0].received_lsn)
+            : null,
+          latencyMs:
+            recvRows[0].latency_ms != null
+              ? Number(recvRows[0].latency_ms)
+              : null,
+          lastMsgReceiptTime: recvRows[0].last_msg_receipt_time,
+        };
+      }
+    }
+
+    return {
+      isPrimary,
+      hasReplicas: replicaInfos.length > 0,
+      primaryLsn: null,
+      walSizeBytes: Number(walSizeRows[0]?.size) || 0,
+      replicas: replicaInfos,
+      maxLagBytes: Math.max(0, ...replicaInfos.map((r) => r.totalLagBytes)),
+      hasLaggedReplicas: replicaInfos.some(
+        (r) => r.totalLagBytes > 50 * 1024 * 1024,
+      ),
+      slots,
+      hasInactiveSlots: slots.some(
+        (s) => !s.active && s.walBytes > 100 * 1024 * 1024,
+      ),
+      totalWalRetained: slots.reduce((s, sl) => s + sl.walBytes, 0),
+      receiverInfo,
+    };
+  }
+
+  public async getSystemInfo(targetId: string) {
+    const serverRows = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT
+        version() AS version, current_setting('data_directory') AS data_directory,
+        current_setting('TimeZone') AS timezone, current_setting('server_encoding') AS server_encoding,
+        current_setting('max_connections')::int AS max_connections,
+        EXTRACT(EPOCH FROM (now() - pg_postmaster_start_time())) / 3600 AS uptime_hours,
+        pg_postmaster_start_time() AS postmaster_start_time
+    `,
+    );
+    const s = serverRows[0];
+
+    const dbRows = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT
+        d.datname AS name, pg_get_userbyid(d.datdba) AS owner,
+        pg_database_size(d.datname) AS size_bytes,
+        pg_size_pretty(pg_database_size(d.datname)) AS size_human,
+        age(d.datfrozenxid) AS age_xid,
+        (SELECT count(*) FROM pg_stat_activity WHERE datname = d.datname) AS connections,
+        d.datistemplate AS is_template
+      FROM pg_database d
+      WHERE NOT d.datistemplate
+      ORDER BY size_bytes DESC
+    `,
+    );
+
+    const extRows = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT e.extname AS name, e.extversion AS version, n.nspname AS schema_name,
+        obj_description(e.oid, 'pg_extension') AS comment
+      FROM pg_extension e
+      JOIN pg_namespace n ON n.oid = e.extnamespace
+      ORDER BY e.extname
+    `,
+    );
+
+    const roleRows = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT rolname AS name, rolsuper AS is_superuser, rolcanlogin AS can_login,
+        rolconnlimit AS connection_limit
+      FROM pg_roles ORDER BY rolname
+    `,
+    );
+
+    const keySettingNames = [
+      'shared_buffers',
+      'effective_cache_size',
+      'work_mem',
+      'maintenance_work_mem',
+      'max_connections',
+      'random_page_cost',
+      'checkpoint_completion_target',
+    ];
+    const keySettingRows = await this.poolManager.query<{
+      name: string;
+      setting: string;
+      unit: string;
+    }>(
+      targetId,
+      `SELECT name, setting, unit FROM pg_settings WHERE name = ANY($1)`,
+      [keySettingNames],
+    );
+    const keySettings: Record<string, string> = {};
+    for (const r of keySettingRows)
+      keySettings[r.name] = `${r.setting}${r.unit ?? ''}`;
+
+    const configIssues: Array<{
+      setting: string;
+      current: string;
+      recommended: string;
+      reason: string;
+      severity: string;
+    }> = [];
+    const sharedBuffers = keySettingRows.find(
+      (r) => r.name === 'shared_buffers',
+    );
+    if (sharedBuffers && Number(sharedBuffers.setting) < 16384) {
+      configIssues.push({
+        setting: 'shared_buffers',
+        current: keySettings['shared_buffers'] ?? '',
+        recommended: '25% of RAM',
+        reason:
+          'shared_buffers is very low — this significantly hurts cache hit ratio',
+        severity: 'warning',
+      });
+    }
+
+    return {
+      server: {
+        version: String(s.version).split(' ')[1] ?? String(s.version),
+        majorVersion: parseInt(
+          String(s.version).split(' ')[1]?.split('.')[0] ?? '0',
+          10,
+        ),
+        dataDirectory: String(s.data_directory),
+        timezone: String(s.timezone),
+        serverEncoding: String(s.server_encoding),
+        maxConnections: Number(s.max_connections),
+        uptimeHours: Number(s.uptime_hours) || 0,
+        postmasterStartTime: s.postmaster_start_time,
+      },
+      databases: dbRows.map((r) => ({
+        name: String(r.name),
+        owner: String(r.owner),
+        sizeBytes: Number(r.size_bytes) || 0,
+        sizeHuman: String(r.size_human),
+        ageXid: Number(r.age_xid) || 0,
+        connections: Number(r.connections) || 0,
+        isTemplate: Boolean(r.is_template),
+      })),
+      extensions: extRows.map((r) => ({
+        name: String(r.name),
+        version: String(r.version),
+        schemaName: String(r.schema_name),
+        comment: r.comment ? String(r.comment) : null,
+      })),
+      roles: roleRows.map((r) => ({
+        name: String(r.name),
+        isSuperuser: Boolean(r.is_superuser),
+        canLogin: Boolean(r.can_login),
+        connectionLimit: Number(r.connection_limit) || -1,
+      })),
+      keySettings,
+      totalDatabaseSize: dbRows.reduce(
+        (sum, r) => sum + (Number(r.size_bytes) || 0),
+        0,
+      ),
+      configIssues,
+    };
+  }
+
+  public async getSettings(targetId: string, search?: string) {
+    const rows = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT name, setting, unit, category, short_desc, context, source, vartype,
+        pending_restart AS is_pending_restart
+      FROM pg_settings
+      WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%' OR short_desc ILIKE '%' || $1 || '%')
+      ORDER BY category, name
+    `,
+      [search ?? null],
+    );
+
+    const settings = rows.map((r) => ({
+      name: String(r.name),
+      setting: String(r.setting),
+      unit: r.unit ? String(r.unit) : null,
+      category: String(r.category),
+      shortDesc: String(r.short_desc ?? ''),
+      context: String(r.context),
+      source: String(r.source),
+      vartype: String(r.vartype),
+      isPendingRestart: Boolean(r.is_pending_restart),
+    }));
+
+    return { settings };
+  }
+}
