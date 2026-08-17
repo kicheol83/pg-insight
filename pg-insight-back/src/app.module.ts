@@ -16,6 +16,7 @@ import { AlertsModule } from './alerts/alerts.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RealTimeModule } from './real-time/real-time.module';
 import { AuditModule } from './audit/audit.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { AuditModule } from './audit/audit.module';
     MetricsModule,
     LiveModule,
     AuditModule,
+    HealthModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
