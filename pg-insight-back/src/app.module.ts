@@ -15,6 +15,7 @@ import { LiveModule } from './live/live.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RealTimeModule } from './real-time/real-time.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { RealTimeModule } from './real-time/real-time.module';
     CollectorModule,
     MetricsModule,
     LiveModule,
+    AuditModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
