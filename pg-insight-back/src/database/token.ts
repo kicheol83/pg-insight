@@ -1,0 +1,1 @@
+export const PLATFORM_POOL = 'PLATFORM_POOL';
