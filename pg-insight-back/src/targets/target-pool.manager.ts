@@ -1,0 +1,340 @@
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
+import { Pool, PoolClient, PoolConfig } from 'pg';
+import { PrismaService } from '../database/prisma.service';
+import { decrypt, getEncryptionKey } from '../common/crypto.util';
+
+export interface TargetPoolEntry {
+  pool: Pool;
+  targetId: string;
+  host: string;
+  port: number;
+  database: string;
+  username: string;
+  status: 'connecting' | 'active' | 'error';
+  pgVersion?: string;
+  pgVersionNum?: number;
+  hasStatStatements: boolean;
+  errorMessage?: string;
+  connectedAt?: Date;
+}
+
+@Injectable()
+export class TargetPoolManager implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(TargetPoolManager.name);
+
+  private readonly pools = new Map<string, TargetPoolEntry>();
+
+  private readonly creating = new Set<string>();
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async onModuleInit(): Promise<void> {
+    this.logger.log('🔌 TargetPoolManager initializing...');
+
+    const db = this.prisma as unknown as Record<string, unknown>;
+    const targets = await (
+      db['target'] as {
+        findMany: (args: unknown) => Promise<
+          Array<{
+            id: string;
+            host: string;
+            port: number;
+            database: string;
+            username: string;
+            passwordEncrypted: string;
+            sslMode: string;
+            isActive: boolean;
+          }>
+        >;
+      }
+    ).findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        host: true,
+        port: true,
+        database: true,
+        username: true,
+        passwordEncrypted: true,
+        sslMode: true,
+        isActive: true,
+      },
+    });
+
+    this.logger.log(`Found ${targets.length} active target(s)`);
+
+    const encryptionKey = getEncryptionKey();
+
+    await Promise.allSettled(
+      targets.map((t) => {
+        let plainPassword: string;
+        try {
+          plainPassword = decrypt(t.passwordEncrypted, encryptionKey);
+        } catch (error) {
+          this.logger.error(
+            `Failed to decrypt password for target ${t.id.slice(0, 8)}: ${(error as Error).message}`,
+          );
+          return Promise.resolve();
+        }
+        return this.createPool(t.id, {
+          host: t.host,
+          port: t.port,
+          database: t.database,
+          user: t.username,
+          password: plainPassword,
+          ssl: this.buildSslConfig(t.sslMode),
+        });
+      }),
+    );
+
+    this.logger.log(`${this.pools.size}/${targets.length} target(s) connected`);
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    this.logger.log('🔌 Draining all connection pools...');
+
+    await Promise.allSettled(
+      Array.from(this.pools.values()).map((entry) =>
+        entry.pool.end().then(() => {
+          this.logger.debug(`Pool drained: ${entry.targetId}`);
+        }),
+      ),
+    );
+
+    this.pools.clear();
+    this.logger.log('All pools drained');
+  }
+
+  async createPool(
+    targetId: string,
+    config: PoolConfig & { password: string },
+  ): Promise<TargetPoolEntry> {
+    if (this.creating.has(targetId)) {
+      this.logger.warn(`Pool for ${targetId} is already being created`);
+      const existing = this.pools.get(targetId);
+      if (existing) return existing;
+      await new Promise((r) => setTimeout(r, 2000));
+      return this.pools.get(targetId) ?? this.createPool(targetId, config);
+    }
+
+    if (this.pools.has(targetId)) {
+      await this.removePool(targetId);
+    }
+
+    this.creating.add(targetId);
+
+    const entry: TargetPoolEntry = {
+      pool: null as unknown as Pool,
+      targetId,
+      host: config.host as string,
+      port: config.port as number,
+      database: config.database as string,
+      username: config.user as string,
+      status: 'connecting',
+      hasStatStatements: false,
+    };
+
+    try {
+      const pool = new Pool({
+        ...config,
+        min: 1,
+        max: 5,
+        idleTimeoutMillis: 30_000,
+        connectionTimeoutMillis: 10_000,
+        application_name: `pg-insight[${targetId.slice(0, 8)}]`,
+      });
+
+      pool.on('error', (err) => {
+        this.logger.error(`Pool error [target:${targetId}]: ${err.message}`);
+        const e = this.pools.get(targetId);
+        if (e) {
+          e.status = 'error';
+          e.errorMessage = err.message;
+        }
+      });
+
+      entry.pool = pool;
+
+      const client = await pool.connect();
+
+      try {
+        const versionResult = await client.query<{
+          version: string;
+          version_num: string;
+        }>(`
+          SELECT
+            split_part(version(), ' ', 2)  AS version,
+            current_setting('server_version_num') AS version_num
+        `);
+
+        const { version, version_num } = versionResult.rows[0];
+        entry.pgVersion = version;
+        entry.pgVersionNum = parseInt(version_num, 10);
+
+        const ssResult = await client.query<{ exists: boolean }>(`
+          SELECT EXISTS(
+            SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements'
+          ) AS exists
+        `);
+        entry.hasStatStatements = ssResult.rows[0].exists;
+
+        entry.status = 'active';
+        entry.connectedAt = new Date();
+
+        this.logger.log(
+          `Connected to target [${targetId.slice(0, 8)}] ` +
+            `${config.host}:${config.port}/${config.database} ` +
+            `(PG ${version}, pg_stat_statements: ${entry.hasStatStatements})`,
+        );
+
+        await this.updateTargetStatus(targetId, 'active', {
+          pgVersion: version,
+          pgVersionNum: parseInt(version_num, 10),
+          hasStatStatements: entry.hasStatStatements,
+        });
+      } finally {
+        client.release();
+      }
+
+      this.pools.set(targetId, entry);
+      return entry;
+    } catch (error) {
+      const msg = (error as Error).message;
+      this.logger.error(
+        `Failed to connect target [${targetId.slice(0, 8)}]: ${msg}`,
+      );
+
+      entry.status = 'error';
+      entry.errorMessage = msg;
+
+      if (entry.pool) this.pools.set(targetId, entry);
+
+      await this.updateTargetStatus(targetId, 'error', {}, msg);
+
+      throw error;
+    } finally {
+      this.creating.delete(targetId);
+    }
+  }
+
+  getPool(targetId: string): Pool | null {
+    return this.pools.get(targetId)?.pool ?? null;
+  }
+
+  getEntry(targetId: string): TargetPoolEntry | null {
+    return this.pools.get(targetId) ?? null;
+  }
+
+  getAllEntries(): TargetPoolEntry[] {
+    return Array.from(this.pools.values());
+  }
+
+  async removePool(targetId: string): Promise<void> {
+    const entry = this.pools.get(targetId);
+    if (!entry) return;
+
+    try {
+      await entry.pool.end();
+      this.logger.log(`Pool removed: ${targetId}`);
+    } catch (error) {
+      this.logger.error(
+        `Error draining pool ${targetId}:`,
+        (error as Error).message,
+      );
+    } finally {
+      this.pools.delete(targetId);
+    }
+  }
+
+  getPoolStats(targetId: string): {
+    totalCount: number;
+    idleCount: number;
+    waitingCount: number;
+  } | null {
+    const entry = this.pools.get(targetId);
+    if (!entry) return null;
+
+    return {
+      totalCount: entry.pool.totalCount,
+      idleCount: entry.pool.idleCount,
+      waitingCount: entry.pool.waitingCount,
+    };
+  }
+
+  async query<T extends Record<string, unknown>>(
+    targetId: string,
+    sql: string,
+    params: unknown[] = [],
+  ): Promise<T[]> {
+    const pool = this.getPool(targetId);
+    if (!pool) throw new Error(`No pool found for target: ${targetId}`);
+
+    const result = await pool.query<T>(sql, params);
+    return result.rows;
+  }
+
+  async withClient<T>(
+    targetId: string,
+    fn: (client: PoolClient) => Promise<T>,
+  ): Promise<T> {
+    const pool = this.getPool(targetId);
+    if (!pool) throw new Error(`No pool found for target: ${targetId}`);
+
+    const client = await pool.connect();
+    try {
+      return await fn(client);
+    } finally {
+      client.release();
+    }
+  }
+
+  private buildSslConfig(
+    sslMode: string,
+  ): false | { rejectUnauthorized: boolean } | undefined {
+    switch (sslMode) {
+      case 'disable':
+        return false;
+      case 'require':
+        return { rejectUnauthorized: false };
+      case 'verify-ca':
+      case 'verify-full':
+        return { rejectUnauthorized: true };
+      default:
+        return undefined;
+    }
+  }
+
+  private async updateTargetStatus(
+    targetId: string,
+    status: string,
+    extra: Record<string, unknown> = {},
+    errorMessage?: string,
+  ): Promise<void> {
+    try {
+      const db = this.prisma as unknown as Record<string, unknown>;
+      await (
+        db['target'] as {
+          update: (args: unknown) => Promise<unknown>;
+        }
+      ).update({
+        where: { id: targetId },
+        data: {
+          status,
+          errorMessage: errorMessage ?? null,
+          lastConnectedAt: status === 'active' ? new Date() : undefined,
+          ...extra,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        'Failed to update target status:',
+        (error as Error).message,
+      );
+    }
+  }
+}
