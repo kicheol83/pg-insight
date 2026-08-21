@@ -39,7 +39,6 @@ export interface ReplicationSlot {
   active: boolean;
   activePid: number | null;
   xmin: string | null;
-  x;
   catalogXmin: string | null;
   restartLsn: string;
   confirmedFlushLsn: string | null;

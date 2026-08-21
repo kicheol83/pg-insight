@@ -4,6 +4,7 @@
     "moduleResolution": "nodenext",
     "resolvePackageJsonExports": true,
     "esModuleInterop": true,
+    "outDir": "./dist",
     // "isolatedModules": true,
     "declaration": true,
     "removeComments": true,
