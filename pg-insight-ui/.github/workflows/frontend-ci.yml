@@ -1,0 +1,39 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "pg-insight-ui/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "pg-insight-ui/**"
+
+defaults:
+  run:
+    working-directory: pg-insight-ui
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: pg-insight-ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
