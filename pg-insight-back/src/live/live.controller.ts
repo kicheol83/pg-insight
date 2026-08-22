@@ -45,7 +45,7 @@ export class LiveController {
     description: 'Max sessions to return, default 200',
   })
   @ApiQuery({ name: 'offset', required: false })
-  public async connections(
+  async connections(
     @Param('targetId') targetId: string,
     @Query('minMs') minMs?: string,
     @Query('limit') limit?: string,
@@ -65,7 +65,7 @@ export class LiveController {
   })
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'offset', required: false })
-  public async slowQueries(
+  async slowQueries(
     @Param('targetId') targetId: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
@@ -80,7 +80,7 @@ export class LiveController {
   @Post('queries/explain')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Run EXPLAIN (ANALYZE, BUFFERS) on a SELECT query' })
-  public async explain(
+  async explain(
     @Param('targetId') targetId: string,
     @Body() dto: ExplainQueryDto,
     @CurrentUser() user: AuthUser,
@@ -112,7 +112,7 @@ export class LiveController {
 
   @Delete('queries/:pid/cancel')
   @ApiOperation({ summary: 'Cancel a running query by PID' })
-  public async cancelQuery(
+  async cancelQuery(
     @Param('targetId') targetId: string,
     @Param('pid', ParseIntPipe) pid: number,
     @CurrentUser() user: AuthUser,
@@ -130,13 +130,13 @@ export class LiveController {
 
   @Get('locks')
   @ApiOperation({ summary: 'Get lock statistics grouped by mode' })
-  public async locks(@Param('targetId') targetId: string) {
+  async locks(@Param('targetId') targetId: string) {
     return this.liveQuery.getAllLocks(targetId);
   }
 
   @Get('locks/chains')
   @ApiOperation({ summary: 'Get blocking chains — who is blocking whom' })
-  public async lockChains(@Param('targetId') targetId: string) {
+  async lockChains(@Param('targetId') targetId: string) {
     return this.liveQuery.getLockChains(targetId);
   }
 
@@ -144,7 +144,7 @@ export class LiveController {
   @ApiOperation({
     summary: 'Get table & index statistics with recommendations',
   })
-  public async tables(@Param('targetId') targetId: string) {
+  async tables(@Param('targetId') targetId: string) {
     return this.liveQuery.getTableStats(targetId);
   }
 
@@ -152,29 +152,39 @@ export class LiveController {
   @ApiOperation({
     summary: 'Get active vacuum progress and XID wraparound risk',
   })
-  public async vacuumProgress(@Param('targetId') targetId: string) {
+  async vacuumProgress(@Param('targetId') targetId: string) {
     return this.liveQuery.getVacuumProgress(targetId);
   }
 
   @Get('replication')
   @ApiOperation({ summary: 'Get replication status — replicas, slots, lag' })
-  public async replication(@Param('targetId') targetId: string) {
+  async replication(@Param('targetId') targetId: string) {
     return this.liveQuery.getReplication(targetId);
   }
 
   @Get('system')
   @ApiOperation({ summary: 'Get server info, databases, extensions, roles' })
-  public async system(@Param('targetId') targetId: string) {
+  async system(@Param('targetId') targetId: string) {
     return this.liveQuery.getSystemInfo(targetId);
   }
 
   @Get('system/settings')
   @ApiOperation({ summary: 'Search pg_settings' })
   @ApiQuery({ name: 'search', required: false })
-  public async settings(
+  async settings(
     @Param('targetId') targetId: string,
     @Query('search') search?: string,
   ) {
     return this.liveQuery.getSettings(targetId, search);
+  }
+
+  @Get('diagnostics')
+  @ApiOperation({
+    summary: 'Run a full diagnostics check against this target',
+    description:
+      'Checks connectivity, permissions, PostgreSQL version, and extensions. Returns actionable fix commands for anything broken — the self-heal flow for open-source users with differently-configured Postgres instances.',
+  })
+  async diagnostics(@Param('targetId') targetId: string) {
+    return this.liveQuery.getDiagnostics(targetId);
   }
 }

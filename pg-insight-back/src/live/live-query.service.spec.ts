@@ -231,3 +231,108 @@ describe('LiveQueryService', () => {
     });
   });
 });
+
+describe('LiveQueryService — getDiagnostics', () => {
+  let service: LiveQueryService;
+  let poolManager: {
+    query: jest.Mock;
+    getEntry: jest.Mock;
+    getPool: jest.Mock;
+  };
+
+  beforeEach(async () => {
+    poolManager = {
+      query: jest.fn(),
+      getEntry: jest
+        .fn()
+        .mockReturnValue({ username: 'monitor_user', pgVersion: '16.1' }),
+      getPool: jest.fn(),
+    };
+    const module = await Test.createTestingModule({
+      providers: [
+        LiveQueryService,
+        { provide: TargetPoolManager, useValue: poolManager },
+      ],
+    }).compile();
+    service = module.get(LiveQueryService);
+  });
+
+  it('reports overallStatus healthy when every check passes', async () => {
+    poolManager.query.mockImplementation(async (_id: string, sql: string) => {
+      if (sql.includes('server_version_num'))
+        return [{ version_num: '160001' }];
+      if (sql.includes('pg_extension')) return [{ exists: true }];
+      return [];
+    });
+
+    const report = await service.getDiagnostics('target-1');
+
+    expect(report.overallStatus).toBe('healthy');
+    expect(report.checks.every((c) => c.status === 'ok')).toBe(true);
+  });
+
+  it('reports overallStatus broken and stops early when connectivity fails', async () => {
+    poolManager.query.mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const report = await service.getDiagnostics('target-1');
+
+    expect(report.overallStatus).toBe('broken');
+    expect(report.checks).toHaveLength(1);
+    expect(report.checks[0].id).toBe('connectivity');
+    expect(report.checks[0].status).toBe('error');
+  });
+
+  it('reports overallStatus degraded when only warnings are present', async () => {
+    poolManager.query.mockImplementation(async (_id: string, sql: string) => {
+      if (sql.includes('server_version_num'))
+        return [{ version_num: '160001' }];
+      if (sql.includes('pg_extension')) return [{ exists: false }];
+      return [];
+    });
+
+    const report = await service.getDiagnostics('target-1');
+
+    expect(report.overallStatus).toBe('degraded');
+    const statementsCheck = report.checks.find(
+      (c) => c.id === 'pg_stat_statements',
+    );
+    expect(statementsCheck?.status).toBe('warning');
+    expect(statementsCheck?.fixCommand).toContain('CREATE EXTENSION');
+  });
+
+  it('marks pg_stat_activity as a critical error with a grant command when permission is denied', async () => {
+    poolManager.query.mockImplementation(async (_id: string, sql: string) => {
+      if (sql.includes('server_version_num'))
+        return [{ version_num: '160001' }];
+      if (sql.includes('pg_extension')) return [{ exists: true }];
+      if (sql.includes('pg_stat_activity'))
+        throw new Error('permission denied for pg_stat_activity');
+      return [];
+    });
+
+    const report = await service.getDiagnostics('target-1');
+
+    const check = report.checks.find((c) => c.id === 'pg_stat_activity');
+    expect(check?.status).toBe('error');
+    expect(check?.fixCommand).toBe('GRANT pg_monitor TO monitor_user;');
+    expect(report.overallStatus).toBe('broken');
+  });
+
+  it('includes the detected username in the grant command', async () => {
+    poolManager.getEntry.mockReturnValue({
+      username: 'custom_readonly',
+      pgVersion: '15.0',
+    });
+    poolManager.query.mockImplementation(async (_id: string, sql: string) => {
+      if (sql.includes('pg_locks')) throw new Error('permission denied');
+      if (sql.includes('server_version_num'))
+        return [{ version_num: '150000' }];
+      if (sql.includes('pg_extension')) return [{ exists: true }];
+      return [];
+    });
+
+    const report = await service.getDiagnostics('target-1');
+    const check = report.checks.find((c) => c.id === 'pg_locks');
+    expect(check?.fixCommand).toBe('GRANT pg_monitor TO custom_readonly;');
+  });
+});

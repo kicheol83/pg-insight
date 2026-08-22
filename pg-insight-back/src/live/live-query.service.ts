@@ -7,12 +7,7 @@ export class LiveQueryService {
 
   constructor(private readonly poolManager: TargetPoolManager) {}
 
-  public async getConnections(
-    targetId: string,
-    minMs = 0,
-    limit = 200,
-    offset = 0,
-  ) {
+  async getConnections(targetId: string, minMs = 0, limit = 200, offset = 0) {
     const rows = await this.poolManager.query<Record<string, unknown>>(
       targetId,
       `
@@ -85,7 +80,6 @@ export class LiveQueryService {
     }
 
     const total = sessions.length;
-
     const pagedSessions = sessions.slice(offset, offset + limit);
     return {
       totalConnections: total,
@@ -113,7 +107,7 @@ export class LiveQueryService {
     };
   }
 
-  public async getSlowQueries(targetId: string, limit = 50, offset = 0) {
+  async getSlowQueries(targetId: string, limit = 50, offset = 0) {
     const entry = this.poolManager.getEntry(targetId);
     if (!entry?.hasStatStatements) {
       return {
@@ -225,7 +219,7 @@ export class LiveQueryService {
       const result = await client.query<{ 'QUERY PLAN': unknown }>(
         `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${trimmed}`,
       );
-      await client.query('ROLLBACK'); // READ ONLY bo'lsa ham hech narsani commit qilmaymiz
+      await client.query('ROLLBACK');
       const executionTimeMs = Date.now() - start;
       const plan = (result.rows[0] as unknown as Record<string, unknown>)[
         'QUERY PLAN'
@@ -266,14 +260,14 @@ export class LiveQueryService {
     }
   }
 
-  public async cancelQuery(targetId: string, pid: number) {
+  async cancelQuery(targetId: string, pid: number) {
     await this.poolManager.query(targetId, `SELECT pg_cancel_backend($1)`, [
       pid,
     ]);
     return { cancelled: true, pid };
   }
 
-  public async getAllLocks(targetId: string) {
+  async getAllLocks(targetId: string) {
     const rows = await this.poolManager.query<Record<string, unknown>>(
       targetId,
       `
@@ -314,7 +308,7 @@ export class LiveQueryService {
     };
   }
 
-  public async getLockChains(targetId: string) {
+  async getLockChains(targetId: string) {
     const rows = await this.poolManager.query<Record<string, unknown>>(
       targetId,
       `
@@ -417,7 +411,7 @@ export class LiveQueryService {
     };
   }
 
-  public async getTableStats(targetId: string) {
+  async getTableStats(targetId: string) {
     const tableRows = await this.poolManager.query<Record<string, unknown>>(
       targetId,
       `
@@ -587,7 +581,7 @@ export class LiveQueryService {
     };
   }
 
-  public async getVacuumProgress(targetId: string) {
+  async getVacuumProgress(targetId: string) {
     const activeRows = await this.poolManager.query<Record<string, unknown>>(
       targetId,
       `
@@ -699,7 +693,8 @@ export class LiveQueryService {
     };
   }
 
-  public async getReplication(targetId: string) {
+  // ── Replication ─────────────────────────────────────────────────
+  async getReplication(targetId: string) {
     const recoveryRows = await this.poolManager.query<{ is_recovery: boolean }>(
       targetId,
       `SELECT pg_is_in_recovery() AS is_recovery`,
@@ -817,7 +812,7 @@ export class LiveQueryService {
     };
   }
 
-  public async getSystemInfo(targetId: string) {
+  async getSystemInfo(targetId: string) {
     const serverRows = await this.poolManager.query<Record<string, unknown>>(
       targetId,
       `
@@ -954,7 +949,7 @@ export class LiveQueryService {
     };
   }
 
-  public async getSettings(targetId: string, search?: string) {
+  async getSettings(targetId: string, search?: string) {
     const rows = await this.poolManager.query<Record<string, unknown>>(
       targetId,
       `
@@ -981,4 +976,249 @@ export class LiveQueryService {
 
     return { settings };
   }
+
+  async getDiagnostics(targetId: string): Promise<DiagnosticsReport> {
+    const checks: DiagnosticCheck[] = [];
+
+    checks.push(
+      await this.runCheck({
+        id: 'connectivity',
+        title: "Ma'lumotlar bazasiga ulanish",
+        affects: 'Barcha sahifalar',
+        run: async () => {
+          await this.poolManager.query(targetId, 'SELECT 1');
+        },
+        severity: 'error',
+        fixTitle: 'Host, port, foydalanuvchi nomi va parolni tekshiring',
+        fixCommand: null,
+        explain: "PostgreSQL serveriga umuman ulanib bo'lmayapti.",
+      }),
+    );
+
+    if (checks[0].status === 'error') {
+      return this.buildReport(targetId, checks);
+    }
+
+    checks.push(
+      await this.runCheck({
+        id: 'version',
+        title: 'PostgreSQL versiyasi',
+        affects: 'Vacuum sahifasi (progress monitoring)',
+        run: async () => {
+          const rows = await this.poolManager.query<{ version_num: string }>(
+            targetId,
+            `SHOW server_version_num`,
+          );
+          const versionNum = parseInt(rows[0]?.version_num ?? '0', 10);
+          if (versionNum < 130000) {
+            throw new Error(
+              `PostgreSQL versiyasi juda eski (${versionNum}) — 13+ tavsiya etiladi`,
+            );
+          }
+        },
+        severity: 'warning',
+        fixTitle: "PostgreSQL 13 yoki undan yangi versiyaga o'ting",
+        fixCommand: null,
+        explain:
+          "pg_stat_progress_vacuum kabi ba'zi tizim view'lari faqat PostgreSQL 13+ da mavjud. Eski versiyada Vacuum sahifasining \"Running vacuums\" bo'limi bo'sh chiqadi.",
+      }),
+    );
+
+    checks.push(
+      await this.runCheck({
+        id: 'pg_stat_activity',
+        title: 'Session monitoring ruxsati',
+        affects: 'Dashboard, Connections sahifalari',
+        run: async () => {
+          await this.poolManager.query(
+            targetId,
+            'SELECT 1 FROM pg_stat_activity LIMIT 1',
+          );
+        },
+        severity: 'error',
+        fixTitle: 'Monitoring foydalanuvchisiga pg_monitor rolini bering',
+        fixCommand: this.grantMonitorCommand(targetId),
+        explain:
+          "Ulangan foydalanuvchida faol session'larni ko'rish uchun yetarli ruxsat yo'q.",
+      }),
+    );
+
+    checks.push(
+      await this.runCheck({
+        id: 'pg_locks',
+        title: 'Lock monitoring ruxsati',
+        affects: 'Locks sahifasi',
+        run: async () => {
+          await this.poolManager.query(
+            targetId,
+            'SELECT 1 FROM pg_locks LIMIT 1',
+          );
+        },
+        severity: 'error',
+        fixTitle: 'Monitoring foydalanuvchisiga pg_monitor rolini bering',
+        fixCommand: this.grantMonitorCommand(targetId),
+        explain:
+          "Ulangan foydalanuvchida lock holatini ko'rish uchun yetarli ruxsat yo'q.",
+      }),
+    );
+
+    checks.push(
+      await this.runCheck({
+        id: 'pg_stat_user_tables',
+        title: 'Jadval statistikasi ruxsati',
+        affects: 'Tables & Indexes sahifasi',
+        run: async () => {
+          await this.poolManager.query(
+            targetId,
+            'SELECT 1 FROM pg_stat_user_tables LIMIT 1',
+          );
+        },
+        severity: 'error',
+        fixTitle: 'Monitoring foydalanuvchisiga pg_monitor rolini bering',
+        fixCommand: this.grantMonitorCommand(targetId),
+        explain:
+          "Ulangan foydalanuvchida jadval statistikasini ko'rish uchun yetarli ruxsat yo'q.",
+      }),
+    );
+
+    checks.push(
+      await this.runCheck({
+        id: 'pg_stat_statements',
+        title: "So'rov statistikasi extension'i",
+        affects: 'Queries sahifasi',
+        run: async () => {
+          const rows = await this.poolManager.query<{ exists: boolean }>(
+            targetId,
+            `
+          SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements') AS exists
+        `,
+          );
+          if (!rows[0]?.exists)
+            throw new Error("pg_stat_statements extension o'rnatilmagan");
+        },
+        severity: 'warning',
+        fixTitle: "pg_stat_statements extension'ini yoqing",
+        fixCommand: 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements;',
+        explain:
+          "Bu extension bo'lmasa, Queries sahifasida sekin so'rovlar ro'yxati ko'rsatilmaydi. Extension yaratishdan oldin postgresql.conf faylida shared_preload_libraries = 'pg_stat_statements' qo'shib, serverni qayta ishga tushirish kerak bo'lishi mumkin.",
+      }),
+    );
+
+    checks.push(
+      await this.runCheck({
+        id: 'pg_stat_replication',
+        title: 'Replikatsiya monitoring ruxsati',
+        affects: 'Replication sahifasi',
+        run: async () => {
+          await this.poolManager.query(
+            targetId,
+            'SELECT 1 FROM pg_stat_replication LIMIT 1',
+          );
+        },
+        severity: 'warning',
+        fixTitle: 'Monitoring foydalanuvchisiga pg_monitor rolini bering',
+        fixCommand: this.grantMonitorCommand(targetId),
+        explain:
+          "Ba'zi boshqariluvchi PostgreSQL provayderlari (masalan RDS) bu view'ga cheklov qo'yishi mumkin — bu holatda Replication sahifasi cheklangan ma'lumot ko'rsatadi, lekin ilova ishlashda davom etadi.",
+      }),
+    );
+
+    checks.push(
+      await this.runCheck({
+        id: 'pg_settings',
+        title: "Server sozlamalarini o'qish ruxsati",
+        affects: 'Settings sahifasi',
+        run: async () => {
+          await this.poolManager.query(
+            targetId,
+            'SELECT 1 FROM pg_settings LIMIT 1',
+          );
+        },
+        severity: 'warning',
+        fixTitle: 'Monitoring foydalanuvchisiga pg_monitor rolini bering',
+        fixCommand: this.grantMonitorCommand(targetId),
+        explain:
+          "Server konfiguratsiyasini o'qib bo'lmayapti — bu juda kam uchraydigan holat.",
+      }),
+    );
+
+    return this.buildReport(targetId, checks);
+  }
+
+  private grantMonitorCommand(targetId: string): string {
+    const entry = this.poolManager.getEntry(targetId);
+    const username = entry?.username ?? 'your_monitoring_user';
+    return `GRANT pg_monitor TO ${username};`;
+  }
+
+  private async runCheck(opts: {
+    id: string;
+    title: string;
+    affects: string;
+    run: () => Promise<void>;
+    severity: 'error' | 'warning';
+    fixTitle: string;
+    fixCommand: string | null;
+    explain: string;
+  }): Promise<DiagnosticCheck> {
+    try {
+      await opts.run();
+      return {
+        id: opts.id,
+        title: opts.title,
+        affects: opts.affects,
+        status: 'ok',
+        message: 'OK',
+        fixTitle: null,
+        fixCommand: null,
+      };
+    } catch (error) {
+      return {
+        id: opts.id,
+        title: opts.title,
+        affects: opts.affects,
+        status: opts.severity,
+        message: opts.explain,
+        detail: (error as Error).message,
+        fixTitle: opts.fixTitle,
+        fixCommand: opts.fixCommand,
+      };
+    }
+  }
+
+  private buildReport(
+    targetId: string,
+    checks: DiagnosticCheck[],
+  ): DiagnosticsReport {
+    const entry = this.poolManager.getEntry(targetId);
+    const hasError = checks.some((c) => c.status === 'error');
+    const hasWarning = checks.some((c) => c.status === 'warning');
+
+    return {
+      targetId,
+      checkedAt: new Date().toISOString(),
+      pgVersion: entry?.pgVersion ?? null,
+      overallStatus: hasError ? 'broken' : hasWarning ? 'degraded' : 'healthy',
+      checks,
+    };
+  }
+}
+
+export interface DiagnosticCheck {
+  id: string;
+  title: string;
+  affects: string;
+  status: 'ok' | 'warning' | 'error';
+  message: string;
+  detail?: string;
+  fixTitle: string | null;
+  fixCommand: string | null;
+}
+
+export interface DiagnosticsReport {
+  targetId: string;
+  checkedAt: string;
+  pgVersion: string | null;
+  overallStatus: 'healthy' | 'degraded' | 'broken';
+  checks: DiagnosticCheck[];
 }
