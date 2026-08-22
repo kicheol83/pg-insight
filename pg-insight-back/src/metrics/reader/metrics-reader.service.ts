@@ -202,18 +202,31 @@ export class MetricsReaderService {
         active_vacuums: string;
       }>(
         `
-      SELECT has_xid_risk, max_xid_age, active_vacuums
-      FROM vacuum_metrics
-      WHERE target_id = $1
-      ORDER BY time DESC LIMIT 1
-    `,
+        SELECT
+          has_xid_risk,
+          max_xid_age,
+          active_vacuums
+        FROM vacuum_metrics
+        WHERE target_id = $1
+        ORDER BY time DESC
+        LIMIT 1
+      `,
         [targetId],
       )
       .catch(() => ({
-        rows: [{ has_xid_risk: false, max_xid_age: '0', active_vacuums: '0' }],
+        rows: [],
       }));
 
     const r = result.rows[0];
+
+    if (!r) {
+      return {
+        hasXidRisk: false,
+        maxXidAge: 0,
+        activeVacuums: 0,
+      };
+    }
+
     return {
       hasXidRisk: r.has_xid_risk,
       maxXidAge: parseInt(r.max_xid_age, 10),

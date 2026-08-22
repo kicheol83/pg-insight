@@ -64,7 +64,7 @@ function protectSwaggerInProduction(
   next();
 }
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create(AppModule); // { bufferLogs: true }
 
   app.setGlobalPrefix('api/v1');
 
