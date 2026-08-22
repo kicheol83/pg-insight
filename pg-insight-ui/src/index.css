@@ -2,7 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Design tokens — Light mode (default) ── */
 :root {
   --bg-base: #f8fafc;
   --bg-card: #ffffff;
@@ -19,7 +18,6 @@
   --blue-bg: #eff6ff;
 }
 
-/* ── Dark mode ── */
 .dark {
   --bg-base: #0f172a;
   --bg-card: #1e293b;
@@ -94,18 +92,20 @@ body {
   font-family: "JetBrains Mono", monospace;
 }
 
-.input {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text-primary);
-  padding: 8px 12px;
-  font-size: 14px;
-  width: 100%;
-  outline: none;
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
+@layer components {
+  .input {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    padding: 8px 12px;
+    font-size: 14px;
+    width: 100%;
+    outline: none;
+    transition:
+      border-color 0.15s,
+      box-shadow 0.15s;
+  }
 }
 .input:focus {
   border-color: #0ea5e9;

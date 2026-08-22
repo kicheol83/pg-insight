@@ -39,6 +39,11 @@ function reducer(state: AppState, action: Action): AppState {
     case "SET_WS_STATUS":
       return { ...state, wsStatus: action.payload };
     case "SET_ACTIVE_TARGET":
+      if (typeof window !== "undefined") {
+        if (action.payload)
+          localStorage.setItem(ACTIVE_TARGET_KEY, action.payload);
+        else localStorage.removeItem(ACTIVE_TARGET_KEY);
+      }
       return { ...state, activeTargetId: action.payload };
     case "SET_RT_CONNECTIONS":
       return {
@@ -64,10 +69,16 @@ interface AppCtx {
 
 const Ctx = createContext<AppCtx | null>(null);
 
+const ACTIVE_TARGET_KEY = "pg-insight-active-target";
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, {
     wsStatus: "connecting",
-    activeTargetId: null,
+
+    activeTargetId:
+      typeof window !== "undefined"
+        ? localStorage.getItem(ACTIVE_TARGET_KEY)
+        : null,
     realtimeConnections: {},
     activeAlertsCount: 0,
   });

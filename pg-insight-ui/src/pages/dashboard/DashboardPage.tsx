@@ -104,6 +104,9 @@ export default function DashboardPage() {
       <>
         <TopBar title="Dashboard" subtitle="Real-time PostgreSQL overview" />
         <PageContent>
+          <div className="flex items-center gap-3 mb-5">
+            <TargetSelector />
+          </div>
           <div className="flex flex-col items-center justify-center h-96 gap-6">
             <div className="w-16 h-16 rounded-2xl bg-brand-500/10 flex items-center justify-center">
               <Database size={32} className="text-brand-500" />
@@ -145,7 +148,6 @@ export default function DashboardPage() {
         }
       />
       <PageContent>
-        {/* Target + time range */}
         <div className="flex items-center gap-3 mb-5">
           <TargetSelector />
           <div className="flex gap-1 ml-auto border border-[var(--border)] rounded-lg p-0.5">
@@ -166,7 +168,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Top stats */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-5">
           <Card>
             <div className="flex items-center justify-between mb-3">
