@@ -17,6 +17,7 @@ import type {
   DashboardSummary,
   ConnectionTrendPoint,
   TimePoint,
+  DiagnosticsReport,
 } from "@/types/model";
 
 export const targetsApi = {
@@ -122,6 +123,8 @@ export const liveApi = {
         settings: PgSetting[];
       }>(`/live/${tid}/system/settings`, { params: { search } })
       .then((r) => r.data),
+  diagnostics: (tid: string) =>
+    http.get<DiagnosticsReport>(`/live/${tid}/diagnostics`).then((r) => r.data),
 };
 
 export const alertsApi = {
