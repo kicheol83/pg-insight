@@ -10,6 +10,7 @@ import {
   GitBranch,
   Bell,
   Settings,
+  Stethoscope,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { to: "/replication", icon: GitBranch, label: "Replication" },
   { to: "/alerts", icon: Bell, label: "Alerts" },
   { to: "/settings", icon: Settings, label: "Settings" },
+  { to: "/diagnostics", icon: Stethoscope, label: "Diagnostics" },
 ];
 
 interface SidebarProps {
@@ -48,7 +50,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         collapsed ? "w-[60px]" : "w-[240px]",
       )}
     >
-      {/* Logo */}
       <div
         className={cn(
           "flex items-center h-14 px-4 border-b border-[var(--border)]",
@@ -70,7 +71,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         )}
       </div>
 
-      {/* WS status */}
       {!collapsed && (
         <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2">
           <LiveDot active={state.wsStatus === "connected"} size="xs" />

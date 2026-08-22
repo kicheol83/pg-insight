@@ -1,6 +1,7 @@
 import { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { TargetHealthGate } from "@/components/layout/TargetHealthGate";
 import { AppProvider } from "@/store/app";
 import { ThemeProvider } from "@/store/theme";
 import { AuthProvider, useAuth } from "@/store/auth";
@@ -20,6 +21,9 @@ const ReplicationPage = lazy(
 );
 const AlertsPage = lazy(() => import("./pages/alerts/AlertsPage"));
 const SettingsPage = lazy(() => import("./pages/settings/SettingsPage"));
+const DiagnosticsPage = lazy(
+  () => import("./pages/diagnostics/DiagnosticsPage"),
+);
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 
 function PageLoader() {
@@ -51,39 +55,54 @@ export default function App() {
                     element={
                       <RequireAuth>
                         <AppLayout>
-                          <Suspense fallback={<PageLoader />}>
-                            <Routes>
-                              <Route path="/" element={<DashboardPage />} />
-                              <Route
-                                path="/targets"
-                                element={<TargetsPage />}
-                              />
-                              <Route
-                                path="/connections"
-                                element={<ConnectionsPage />}
-                              />
-                              <Route
-                                path="/queries"
-                                element={<QueriesPage />}
-                              />
-                              <Route path="/locks" element={<LocksPage />} />
-                              <Route path="/tables" element={<TablesPage />} />
-                              <Route path="/vacuum" element={<VacuumPage />} />
-                              <Route
-                                path="/replication"
-                                element={<ReplicationPage />}
-                              />
-                              <Route path="/alerts" element={<AlertsPage />} />
-                              <Route
-                                path="/settings"
-                                element={<SettingsPage />}
-                              />
-                              <Route
-                                path="*"
-                                element={<Navigate to="/" replace />}
-                              />
-                            </Routes>
-                          </Suspense>
+                          <TargetHealthGate>
+                            <Suspense fallback={<PageLoader />}>
+                              <Routes>
+                                <Route path="/" element={<DashboardPage />} />
+                                <Route
+                                  path="/targets"
+                                  element={<TargetsPage />}
+                                />
+                                <Route
+                                  path="/connections"
+                                  element={<ConnectionsPage />}
+                                />
+                                <Route
+                                  path="/queries"
+                                  element={<QueriesPage />}
+                                />
+                                <Route path="/locks" element={<LocksPage />} />
+                                <Route
+                                  path="/tables"
+                                  element={<TablesPage />}
+                                />
+                                <Route
+                                  path="/vacuum"
+                                  element={<VacuumPage />}
+                                />
+                                <Route
+                                  path="/replication"
+                                  element={<ReplicationPage />}
+                                />
+                                <Route
+                                  path="/alerts"
+                                  element={<AlertsPage />}
+                                />
+                                <Route
+                                  path="/settings"
+                                  element={<SettingsPage />}
+                                />
+                                <Route
+                                  path="/diagnostics"
+                                  element={<DiagnosticsPage />}
+                                />
+                                <Route
+                                  path="*"
+                                  element={<Navigate to="/" replace />}
+                                />
+                              </Routes>
+                            </Suspense>
+                          </TargetHealthGate>
                         </AppLayout>
                       </RequireAuth>
                     }

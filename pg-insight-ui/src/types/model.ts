@@ -356,3 +356,22 @@ export interface DashboardSummary {
   activeAlertsCount: number;
   criticalAlertsCount: number;
 }
+
+export interface DiagnosticCheck {
+  id: string;
+  title: string;
+  affects: string;
+  status: "ok" | "warning" | "error";
+  message: string;
+  detail?: string;
+  fixTitle: string | null;
+  fixCommand: string | null;
+}
+
+export interface DiagnosticsReport {
+  targetId: string;
+  checkedAt: string;
+  pgVersion: string | null;
+  overallStatus: "healthy" | "degraded" | "broken";
+  checks: DiagnosticCheck[];
+}

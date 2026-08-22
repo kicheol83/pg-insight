@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Plus, CheckCircle2, XCircle } from "lucide-react";
 import { Modal, Input, Select, Button, useToast } from "@/components/ui";
 import { targetsApi } from "@/api/endpoints";
+import { useActiveTarget } from "@/store/app";
 import type { ConnectionTestResult } from "@/types/model";
 import { cn } from "@/lib/format";
 
@@ -17,6 +19,8 @@ export function AddTargetModal({
   onAdded,
 }: AddTargetModalProps) {
   const toast = useToast();
+  const navigate = useNavigate();
+  const { setActiveTarget } = useActiveTarget();
   const [loading, setLoading] = useState(false);
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(
     null,
@@ -58,14 +62,16 @@ export function AddTargetModal({
     if (!form.name.trim()) return;
     setLoading(true);
     try {
-      await targetsApi.create({ name: form.name, ...payload() });
+      const target = await targetsApi.create({ name: form.name, ...payload() });
       toast({
         type: "success",
         title: "Target added",
         message: `${form.name} is now being monitored`,
       });
+      setActiveTarget(target.id);
       onAdded();
       handleClose();
+      navigate("/diagnostics");
     } catch (err) {
       toast({
         type: "error",
