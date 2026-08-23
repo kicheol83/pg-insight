@@ -13,7 +13,13 @@ export type AuditAction =
   | 'query.cancel'
   | 'backup.start'
   | 'backup.delete'
-  | 'backup.download';
+  | 'backup.download'
+  | 'maintenance.vacuum.start'
+  | 'maintenance.vacuum.complete'
+  | 'maintenance.vacuum.failed'
+  | 'maintenance.drop_index.start'
+  | 'maintenance.drop_index.complete'
+  | 'maintenance.drop_index.failed';
 
 interface AuditEntry {
   userId?: string | null;
