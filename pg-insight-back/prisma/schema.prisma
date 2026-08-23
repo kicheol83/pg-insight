@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -17,6 +16,7 @@ model User {
 
   refreshTokens RefreshToken[]
   targets       Target[]
+  backups       Backup[]
 
   @@map("users")
 }
@@ -38,15 +38,14 @@ model RefreshToken {
 
 model Target {
   id                String    @id @default(uuid())
-  name              String                          // "Production DB", "Staging"
-  host              String                          // IP yoki hostname
+  name              String                         
+  host              String                          
   port              Int       @default(5432)
-  database          String                          // database nomi
+  database          String                          
   username          String
-  passwordEncrypted String                          // Encrypted parol
-  sslMode           String    @default("prefer")    // disable|allow|prefer|require|verify-ca|verify-full
-  sslCert           String?                         // SSL sertifikat (optional)
-
+  passwordEncrypted String                          
+  sslMode           String    @default("prefer")    
+  sslCert           String?                         
 
   createdByUserId   String?
   createdByUser     User?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
@@ -59,7 +58,7 @@ model Target {
   pgVersion         String?                        
   pgVersionNum      Int?                            
   hasStatStatements Boolean   @default(false)       
-  hasTimescaledb    Boolean   @default(false)       // TimescaleDB extension
+  hasTimescaledb    Boolean   @default(false)      
 
   // Collection intervals (ms) — per-target override possible
   collectionIntervalMs Int    @default(5000)
@@ -74,16 +73,41 @@ model Target {
   alertEvents       AlertEvent[]
   collectionLogs    CollectionLog[]
   savedQueries      SavedQuery[]
+  backups           Backup[]
 
   @@map("targets")
 }
 
+// ── Backup
+
+model Backup {
+  id                String    @id @default(uuid())
+  targetId          String
+  target            Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  status            String    @default("running") // running | completed | failed
+  format            String    @default("custom")  // pg_dump -Fc (custom format — compression + selective restore)
+  filePath          String?                        
+  fileSizeBytes      BigInt?
+  errorMessage      String?
+
+  startedAt         DateTime  @default(now())
+  completedAt       DateTime?
+
+ 
+  triggeredByUserId String?
+  triggeredByUser   User?     @relation(fields: [triggeredByUserId], references: [id], onDelete: SetNull)
+
+  @@index([targetId, startedAt])
+  @@map("backups")
+}
 
 model AuditLog {
   id         String   @id @default(uuid())
-  userId     String?                         
+ 
+  userId     String?                          
   userEmail  String?                          
-  action     String                          
+  action     String                           
   targetId   String?                          
   detail     String?                          
   ipAddress  String?
@@ -99,10 +123,10 @@ model CollectionLog {
   id           String   @id @default(uuid())
   targetId     String
   collectedAt  DateTime @default(now())
-  durationMs   Int                        
-  status       String                     
+  durationMs   Int                        // qancha vaqt ketdi
+  status       String                     // success | error | timeout
   errorMessage String?
-  metricsCount Int      @default(0)       
+  metricsCount Int      @default(0)       // nechta metrik yozildi
 
   target Target @relation(fields: [targetId], references: [id], onDelete: Cascade)
 
@@ -123,7 +147,6 @@ model AlertRule {
   cooldownMs  Int     @default(300000)     // 5 daqiqa default cooldown
   enabled     Boolean @default(true)
 
-
   notifyChannels String[] @default([])
 
   createdAt DateTime @default(now())
@@ -135,15 +158,16 @@ model AlertRule {
   @@map("alert_rules")
 }
 
+
 model AlertEvent {
   id           String    @id @default(uuid())
   targetId     String
   ruleId       String
   triggeredAt  DateTime  @default(now())
   resolvedAt   DateTime?
-  currentValue Float                      
+  currentValue Float                      // trigger paytidagi qiymat
   message      String?
-  acknowledged Boolean   @default(false) 
+  acknowledged Boolean   @default(false) // ko'rib chiqilganmi
 
   target Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
   rule   AlertRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)

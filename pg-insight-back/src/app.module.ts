@@ -1,3 +1,7 @@
+// ══════════════════════════════════════════════════════════════
+// src/app.module.ts — barcha modullarni bog'laydigan root module
+// ══════════════════════════════════════════════════════════════
+
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -13,6 +17,7 @@ import { CollectorModule } from './collector/collector.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { LiveModule } from './live/live.module';
 import { AlertsModule } from './alerts/alerts.module';
+import { BackupModule } from './backup/backup.module';
 import { RealTimeModule } from './real-time/real-time.module';
 
 @Module({
@@ -47,9 +52,11 @@ import { RealTimeModule } from './real-time/real-time.module';
     CollectorModule,
     MetricsModule,
     LiveModule,
+    BackupModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
 })

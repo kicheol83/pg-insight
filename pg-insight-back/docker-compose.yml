@@ -1,13 +1,3 @@
-# ══════════════════════════════════════════════════════════════
-# docker-compose.yml — PG Insight local development stack
-#
-#   platform-db  — target'lar, alert qoidalari (oddiy Postgres)
-#   metrics-db   — collected time-series metrikalar (TimescaleDB)
-#   api          — NestJS backend
-#
-# Ishga tushirish: docker compose up -d
-# ══════════════════════════════════════════════════════════════
-
 services:
   platform-db:
     image: postgres:16-alpine
@@ -18,7 +8,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: pg_insight_platform
     ports:
-      - '5434:5432'
+      - '5432:5432'
     volumes:
       - platform_data:/var/lib/postgresql/data
     healthcheck:
@@ -66,12 +56,16 @@ services:
       SWAGGER_USER: ${SWAGGER_USER:-}
       SWAGGER_PASSWORD: ${SWAGGER_PASSWORD:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      BACKUP_DIR: /app/backups
       PORT: 3000
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       NODE_ENV: production
     ports:
       - '3000:3000'
+    volumes:
+      - backup_data:/app/backups
 
 volumes:
   platform_data:
   metrics_data:
+  backup_data:
