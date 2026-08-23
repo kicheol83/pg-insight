@@ -1,26 +1,3 @@
-// ══════════════════════════════════════════════════════════════
-// src/backup/backup.service.ts
-//
-// pg_dump orqali logical backup — nima uchun pg_basebackup emas:
-//
-//   pg_basebackup — REPLICATION roli, wal_level=replica, ochiq
-//   replication slot kerak. Ko'p boshqariluvchi PostgreSQL
-//   provayderlari (RDS, Cloud SQL, Supabase va h.k.) oddiy
-//   foydalanuvchiga bu huquqni umuman bermaydi.
-//
-//   pg_dump — oddiy SELECT huquqi bilan ishlaydi, hech qanday
-//   maxsus server konfiguratsiyasi kerak emas. Ochiq kodli,
-//   "har kimning muhiti boshqacha" bo'lgan vosita uchun bu —
-//   yagona universal ishlaydigan yechim.
-//
-// Jarayon: backup so'ralganda darhol 'running' yozuv yaratiladi
-// va HTTP javob qaytariladi (pg_dump daqiqalar, hatto soatlab
-// davom etishi mumkin — foydalanuvchini kutdirib qo'ymaymiz).
-// child_process orqali fon rejimida ishga tushadi, tugagach
-// yozuv 'completed' yoki 'failed'ga yangilanadi. Frontend buni
-// useQuery refreshInterval orqali kuzatib boradi.
-// ══════════════════════════════════════════════════════════════
-
 import {
   Injectable,
   Logger,
@@ -48,17 +25,11 @@ export interface BackupRecord {
   triggeredByUserId: string | null;
 }
 
-// API javobida BigInt o'rniga string — JSON.stringify BigInt'ni
-// umuman serialize qila olmaydi ("Do not know how to serialize a
-// BigInt" xatosi bilan butun HTTP javobni yiqitadi). Bu — unit
-// testlar ushlay olmaydigan turdagi bug, chunki ular Express'ning
-// JSON serialize qatlamini chaqirmaydi — faqat haqiqiy HTTP javobda
-// namoyon bo'ladi.
-export type SerializedBackup = Omit<BackupRecord, 'fileSizeBytes'> & {
+type SerializedBackup = Omit<BackupRecord, 'fileSizeBytes'> & {
   fileSizeBytes: string | null;
 };
 
-export function serializeBackup(record: BackupRecord): SerializedBackup {
+function serializeBackup(record: BackupRecord): SerializedBackup {
   return {
     ...record,
     fileSizeBytes:
@@ -183,7 +154,6 @@ export class BackupService {
       '--no-password',
     ];
     if (target.sslMode && target.sslMode !== 'disable') {
-      // pg_dump libpq env orqali SSL rejimini oladi (PGSSLMODE)
     }
 
     this.logger.log(`Starting pg_dump for target ${target.id} → ${filePath}`);
