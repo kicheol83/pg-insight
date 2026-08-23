@@ -10,6 +10,11 @@ import {
   ChevronDown,
   ChevronRight,
   AlertTriangle,
+  Shield,
+  CheckCircle2,
+  XCircle,
+  Info,
+  HelpCircle,
 } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { PageContent } from "@/components/layout/AppLayout";
@@ -20,6 +25,7 @@ import {
   Button,
   DataTable,
   EmptyState,
+  LoadingState,
   Tabs,
   TabList,
   Tab,
@@ -28,10 +34,10 @@ import {
 } from "@/components/ui";
 import { useQuery } from "@/hooks/useQuery";
 import { useActiveTarget } from "@/store/app";
-import { liveApi } from "@/api/endpoints";
+import { liveApi, securityApi } from "@/api/endpoints";
 import { fmtBytes, cn } from "@/lib/format";
 import { severityBadge } from "@/lib/colors";
-import type { PgSetting } from "@/types/model";
+import type { PgSetting, SecurityCheck } from "@/types/model";
 
 function SettingsGroup({
   category,
@@ -92,6 +98,66 @@ function SettingsGroup({
   );
 }
 
+function SecurityStatusIcon({ status }: { status: SecurityCheck["status"] }) {
+  if (status === "ok")
+    return <CheckCircle2 size={16} className="text-green-400 shrink-0" />;
+  if (status === "warning")
+    return <XCircle size={16} className="text-red-400 shrink-0" />;
+  if (status === "info")
+    return <Info size={16} className="text-blue-400 shrink-0" />;
+  return <HelpCircle size={16} className="text-muted shrink-0" />;
+}
+
+function SecurityCheckCard({ check }: { check: SecurityCheck }) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border p-4",
+        check.status === "warning"
+          ? "border-red-300 dark:border-red-500/40 bg-red-50/50 dark:bg-red-500/5"
+          : check.status === "unavailable"
+            ? "border-[var(--border)] opacity-70"
+            : "border-[var(--border)]",
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <SecurityStatusIcon status={check.status} />
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-primary">{check.title}</h3>
+          <p className="text-xs text-secondary mt-1">{check.message}</p>
+
+          {check.items && check.items.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {check.items.slice(0, 8).map((item, i) => (
+                <code
+                  key={i}
+                  className="text-[10px] mono text-secondary bg-[var(--bg-subtle)] border border-[var(--border)] rounded px-1.5 py-0.5"
+                >
+                  {item}
+                </code>
+              ))}
+              {check.items.length > 8 && (
+                <span className="text-[10px] text-muted self-center">
+                  +{check.items.length - 8} more
+                </span>
+              )}
+            </div>
+          )}
+
+          {check.recommendation && (
+            <div className="mt-3 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border)] p-2.5">
+              <p className="text-[11px] text-secondary">
+                <span className="font-medium text-primary">Tavsiya: </span>
+                {check.recommendation}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { activeTargetId } = useActiveTarget();
   const [settingSearch, setSettingSearch] = useState("");
@@ -108,6 +174,13 @@ export default function SettingsPage() {
     () => liveApi.settings(activeTargetId ?? "", settingSearch || undefined),
     { enabled: !!activeTargetId },
   );
+  const {
+    data: securityReport,
+    loading: securityLoading,
+    refetch: refetchSecurity,
+  } = useQuery(() => securityApi.audit(activeTargetId ?? ""), {
+    enabled: !!activeTargetId,
+  });
 
   const grouped = (settingsData?.settings ?? [])
     .filter(
@@ -202,6 +275,9 @@ export default function SettingsPage() {
             </Tab>
             <Tab value="extensions" icon={<Puzzle size={13} />}>
               Extensions
+            </Tab>
+            <Tab value="security" icon={<Shield size={13} />}>
+              Security
             </Tab>
           </TabList>
 
@@ -423,6 +499,40 @@ export default function SettingsPage() {
                 ]}
               />
             </Card>
+          </TabPanel>
+
+          <TabPanel value="security">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs text-muted">
+                Faqat o'qish — hech qanday amal bajarilmaydi. Ba'zi tekshiruvlar
+                monitoring foydalanuvchisining huquqiga qarab "unavailable"
+                bo'lishi mumkin.
+              </p>
+              <Button
+                size="xs"
+                variant="ghost"
+                icon={<RefreshCw size={12} />}
+                onClick={refetchSecurity}
+                loading={securityLoading}
+              >
+                Qayta tekshirish
+              </Button>
+            </div>
+            {securityLoading && !securityReport ? (
+              <Card>
+                <LoadingState message="Xavfsizlik tekshiruvi o'tkazilmoqda…" />
+              </Card>
+            ) : !securityReport?.checks?.length ? (
+              <Card>
+                <EmptyState icon={<Shield size={28} />} title="Ma'lumot yo'q" />
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {securityReport.checks.map((check) => (
+                  <SecurityCheckCard key={check.id} check={check} />
+                ))}
+              </div>
+            )}
           </TabPanel>
         </Tabs>
       </PageContent>
