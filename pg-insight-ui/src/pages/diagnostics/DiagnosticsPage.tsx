@@ -1,3 +1,15 @@
+// ══════════════════════════════════════════════════════════════
+// src/pages/diagnostics/DiagnosticsPage.tsx
+//
+// PG Insight open source — har kimning PostgreSQL muhiti boshqacha
+// (versiya, ruxsatlar, extension'lar). Shu sabab target ulanganda
+// yoki muammoga uchraganda foydalanuvchi buzilgan sahifalar bilan
+// qolib ketmasin deb, shu sahifaga yo'naltiriladi: har bir muammo
+// oddiy tilda tushuntiriladi va aniq tuzatish buyrug'i (nusxalash
+// tugmasi bilan) ko'rsatiladi. Muammolar hal bo'lgach — "Davom
+// etish" tugmasi orqali asosiy sahifalarga o'tish mumkin.
+// ══════════════════════════════════════════════════════════════
+
 import { useNavigate } from "react-router-dom";
 import {
   CheckCircle2,
@@ -7,6 +19,9 @@ import {
   ArrowRight,
   Stethoscope,
   Database,
+  Gauge,
+  Info,
+  HelpCircle,
 } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { PageContent } from "@/components/layout/AppLayout";
@@ -24,7 +39,11 @@ import { useQuery } from "@/hooks/useQuery";
 import { useActiveTarget } from "@/store/app";
 import { liveApi } from "@/api/endpoints";
 import { cn } from "@/lib/format";
-import type { DiagnosticCheck } from "@/types/model";
+import type {
+  DiagnosticCheck,
+  HealthFactor,
+  HealthScoreReport,
+} from "@/types/model";
 
 function StatusIcon({ status }: { status: DiagnosticCheck["status"] }) {
   if (status === "ok")
@@ -93,6 +112,135 @@ function CheckRow({ check }: { check: DiagnosticCheck }) {
   );
 }
 
+function HealthFactorStatusIcon({
+  status,
+}: {
+  status: HealthFactor["status"];
+}) {
+  if (status === "ok")
+    return <CheckCircle2 size={14} className="text-green-400 shrink-0" />;
+  if (status === "warning")
+    return <AlertTriangle size={14} className="text-yellow-400 shrink-0" />;
+  if (status === "info")
+    return <Info size={14} className="text-blue-400 shrink-0" />;
+  return <XCircle size={14} className="text-red-400 shrink-0" />;
+}
+
+function HealthFactorRow({ factor }: { factor: HealthFactor }) {
+  return (
+    <div className="flex items-start gap-2.5 py-2 border-b border-[var(--border)] last:border-0">
+      <HealthFactorStatusIcon status={factor.status} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-primary">
+            {factor.label}
+          </span>
+          {factor.impact < 0 && (
+            <span className="text-xs mono text-red-400 font-medium shrink-0">
+              {factor.impact}
+            </span>
+          )}
+        </div>
+        {factor.detail && (
+          <p className="text-[11px] text-muted mt-0.5">{factor.detail}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const GRADE_LABEL: Record<HealthScoreReport["grade"], string> = {
+  excellent: "A'lo",
+  good: "Yaxshi",
+  fair: "O'rtacha",
+  poor: "Yomon",
+};
+const GRADE_COLOR: Record<HealthScoreReport["grade"], string> = {
+  excellent: "text-green-400",
+  good: "text-blue-400",
+  fair: "text-yellow-400",
+  poor: "text-red-400",
+};
+const GRADE_RING: Record<HealthScoreReport["grade"], string> = {
+  excellent: "border-green-400",
+  good: "border-blue-400",
+  fair: "border-yellow-400",
+  poor: "border-red-400",
+};
+
+function HealthScoreCard({
+  data,
+  loading,
+  onRefresh,
+}: {
+  data: HealthScoreReport | null;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  return (
+    <Card className="mb-5">
+      <CardHeader
+        title="Health Score"
+        subtitle="Database operatsion holati — bloat, XID, cache, replication, backup"
+        icon={<Gauge size={15} />}
+        action={
+          <Button
+            size="xs"
+            variant="ghost"
+            icon={<RefreshCw size={12} />}
+            onClick={onRefresh}
+            loading={loading}
+          >
+            Yangilash
+          </Button>
+        }
+      />
+      {loading && !data ? (
+        <LoadingState message="Hisoblanmoqda…" />
+      ) : !data ? (
+        <EmptyState icon={<HelpCircle size={24} />} title="Ma'lumot yo'q" />
+      ) : (
+        <div className="flex flex-col sm:flex-row gap-6">
+          <div className="flex items-center gap-4 shrink-0">
+            <div
+              className={cn(
+                "w-20 h-20 rounded-full border-4 flex flex-col items-center justify-center shrink-0",
+                GRADE_RING[data.grade],
+              )}
+            >
+              <span
+                className={cn(
+                  "text-2xl font-bold tabular-nums leading-none",
+                  GRADE_COLOR[data.grade],
+                )}
+              >
+                {data.score}
+              </span>
+              <span className="text-[9px] text-muted mt-0.5">/ 100</span>
+            </div>
+            <div>
+              <div
+                className={cn("text-sm font-semibold", GRADE_COLOR[data.grade])}
+              >
+                {GRADE_LABEL[data.grade]}
+              </div>
+              <div className="text-[11px] text-muted mt-0.5">
+                {data.factors.filter((f) => f.status !== "ok").length} ta omil
+                ballga ta'sir qilmoqda
+              </div>
+            </div>
+          </div>
+          <div className="flex-1 min-w-0 sm:border-l sm:border-[var(--border)] sm:pl-6">
+            {data.factors.map((f) => (
+              <HealthFactorRow key={f.id} factor={f} />
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function DiagnosticsPage() {
   const { activeTargetId } = useActiveTarget();
   const navigate = useNavigate();
@@ -101,6 +249,13 @@ export default function DiagnosticsPage() {
     () => liveApi.diagnostics(activeTargetId ?? ""),
     { enabled: !!activeTargetId },
   );
+  const {
+    data: healthData,
+    loading: healthLoading,
+    refetch: refetchHealth,
+  } = useQuery(() => liveApi.healthScore(activeTargetId ?? ""), {
+    enabled: !!activeTargetId,
+  });
 
   if (!activeTargetId) {
     return (
@@ -152,6 +307,12 @@ export default function DiagnosticsPage() {
         <div className="flex items-center gap-3 mb-5">
           <TargetSelector />
         </div>
+
+        <HealthScoreCard
+          data={healthData ?? null}
+          loading={healthLoading}
+          onRefresh={refetchHealth}
+        />
 
         {loading && !data ? (
           <Card>
@@ -234,7 +395,6 @@ export default function DiagnosticsPage() {
               </div>
             </Card>
 
-            {/* Har bir tekshiruv */}
             <div className="space-y-3">
               {data.checks.map((check) => (
                 <CheckRow key={check.id} check={check} />

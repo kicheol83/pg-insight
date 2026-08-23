@@ -530,3 +530,19 @@ export interface SecurityAuditReport {
   checkedAt: string;
   checks: SecurityCheck[];
 }
+
+export interface HealthFactor {
+  id: string;
+  label: string;
+  status: "ok" | "info" | "warning" | "critical";
+  impact: number;
+  detail?: string;
+}
+
+export interface HealthScoreReport {
+  targetId: string;
+  checkedAt: string;
+  score: number;
+  grade: "excellent" | "good" | "fair" | "poor";
+  factors: HealthFactor[];
+}
