@@ -16,6 +16,7 @@ import {
   Server,
   HardDrive,
   ListChecks,
+  HardDriveDownload,
 } from "lucide-react";
 import { cn } from "@/lib/format";
 import { useAppStore } from "@/store/app";
@@ -24,6 +25,7 @@ import { LiveDot, Badge } from "@/components/ui";
 const NAV_ITEMS = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard", exact: true },
   { to: "/targets", icon: Database, label: "Targets" },
+  { to: "/backups", icon: HardDriveDownload, label: "Backups" },
   { to: "/database", icon: Server, label: "Database" },
   { to: "/connections", icon: Wifi, label: "Connections" },
   { to: "/queries", icon: Zap, label: "Queries" },
@@ -86,7 +88,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
       )}
 
-      {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-2">
         {NAV_ITEMS.map((item) => {
           const active = item.exact
@@ -125,7 +126,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         })}
       </nav>
 
-      {/* Collapse toggle */}
       <div
         className={cn(
           "p-3 border-t border-[var(--border)] flex",

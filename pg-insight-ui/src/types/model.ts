@@ -515,34 +515,3 @@ export interface Backup {
   completedAt: string | null;
   triggeredByUserId: string | null;
 }
-
-export interface SecurityCheck {
-  id: string;
-  title: string;
-  status: "ok" | "warning" | "info" | "unavailable";
-  message: string;
-  items?: string[];
-  recommendation?: string;
-}
-
-export interface SecurityAuditReport {
-  targetId: string;
-  checkedAt: string;
-  checks: SecurityCheck[];
-}
-
-export interface HealthFactor {
-  id: string;
-  label: string;
-  status: "ok" | "info" | "warning" | "critical";
-  impact: number;
-  detail?: string;
-}
-
-export interface HealthScoreReport {
-  targetId: string;
-  checkedAt: string;
-  score: number;
-  grade: "excellent" | "good" | "fair" | "poor";
-  factors: HealthFactor[];
-}
