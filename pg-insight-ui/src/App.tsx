@@ -6,8 +6,7 @@ import { AppProvider } from "@/store/app";
 import { ThemeProvider } from "@/store/theme";
 import { AuthProvider, useAuth } from "@/store/auth";
 import { ToastProvider, Spinner } from "@/components/ui";
-import IoMonitoringPage from "./pages/io/IomonitoringPage";
-import JobProgressPage from "./pages/job-progress/JobProgressPage";
+import BackupsPage from "./pages/backup/BackupsPage";
 
 const DashboardPage = lazy(() => import("./pages/dashboard/DashboardPage"));
 const TargetsPage = lazy(() => import("./pages/targets/TargetsPage"));
@@ -27,7 +26,10 @@ const DiagnosticsPage = lazy(
   () => import("./pages/diagnostics/DiagnosticsPage"),
 );
 const DatabasePage = lazy(() => import("./pages/database/DatabasePage"));
-
+const IoMonitoringPage = lazy(() => import("./pages/io/IoMonitoringPage"));
+const JobProgressPage = lazy(
+  () => import("./pages/job-progress/JobProgressPage"),
+);
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 
 function PageLoader() {
@@ -38,9 +40,6 @@ function PageLoader() {
   );
 }
 
-// Token bo'lmasa /login'ga qaytaradi. Backend har bir so'rovda
-// tokenni tekshiradi (401 kelsa http.ts o'zi ham qaytaradi) —
-// bu esa ilk yuklanishda keraksiz "chaqnash"ni oldini oladi.
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
@@ -69,6 +68,10 @@ export default function App() {
                                 <Route
                                   path="/targets"
                                   element={<TargetsPage />}
+                                />
+                                <Route
+                                  path="/backups"
+                                  element={<BackupsPage />}
                                 />
                                 <Route
                                   path="/database"

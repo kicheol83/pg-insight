@@ -22,8 +22,6 @@ import type {
   IoStatsSnapshot,
   JobProgressSnapshot,
   Backup,
-  SecurityAuditReport,
-  HealthScoreReport,
 } from "@/types/model";
 
 export const targetsApi = {
@@ -131,10 +129,6 @@ export const liveApi = {
       .then((r) => r.data),
   diagnostics: (tid: string) =>
     http.get<DiagnosticsReport>(`/live/${tid}/diagnostics`).then((r) => r.data),
-  healthScore: (tid: string) =>
-    http
-      .get<HealthScoreReport>(`/live/${tid}/health-score`)
-      .then((r) => r.data),
   databaseStats: (tid: string) =>
     http
       .get<DatabaseStatsSnapshot>(`/live/${tid}/database`)
@@ -177,26 +171,4 @@ export const backupsApi = {
         responseType: "blob",
       })
       .then((r) => r.data as Blob),
-};
-
-export const maintenanceApi = {
-  vacuumTable: (tid: string, schema: string, table: string) =>
-    http
-      .post<{
-        started: true;
-        target: string;
-      }>(`/maintenance/${tid}/vacuum`, { schema, table })
-      .then((r) => r.data),
-  dropUnusedIndex: (tid: string, schema: string, index: string) =>
-    http
-      .delete<{
-        started: true;
-        index: string;
-      }>(`/maintenance/${tid}/index`, { data: { schema, index } })
-      .then((r) => r.data),
-};
-
-export const securityApi = {
-  audit: (tid: string) =>
-    http.get<SecurityAuditReport>(`/security/${tid}/audit`).then((r) => r.data),
 };
