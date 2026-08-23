@@ -10,7 +10,10 @@ export type AuditAction =
   | 'target.delete'
   | 'target.update'
   | 'query.explain'
-  | 'query.cancel';
+  | 'query.cancel'
+  | 'backup.start'
+  | 'backup.delete'
+  | 'backup.download';
 
 interface AuditEntry {
   userId?: string | null;
