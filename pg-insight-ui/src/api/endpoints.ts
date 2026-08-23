@@ -172,3 +172,20 @@ export const backupsApi = {
       })
       .then((r) => r.data as Blob),
 };
+
+export const maintenanceApi = {
+  vacuumTable: (tid: string, schema: string, table: string) =>
+    http
+      .post<{
+        started: true;
+        target: string;
+      }>(`/maintenance/${tid}/vacuum`, { schema, table })
+      .then((r) => r.data),
+  dropUnusedIndex: (tid: string, schema: string, index: string) =>
+    http
+      .delete<{
+        started: true;
+        index: string;
+      }>(`/maintenance/${tid}/index`, { data: { schema, index } })
+      .then((r) => r.data),
+};

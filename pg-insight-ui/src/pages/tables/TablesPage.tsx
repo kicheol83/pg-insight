@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Trash2,
   Search as SearchIcon,
+  Play,
 } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { PageContent } from "@/components/layout/AppLayout";
@@ -22,13 +23,15 @@ import {
   TabPanel,
   CopyButton,
   TargetSelector,
+  Modal,
+  useToast,
 } from "@/components/ui";
 import { useQuery } from "@/hooks/useQuery";
 import { useActiveTarget } from "@/store/app";
-import { liveApi } from "@/api/endpoints";
+import { liveApi, maintenanceApi } from "@/api/endpoints";
 import { fmtBytes, fmtNum, fmtRelative, cn } from "@/lib/format";
 import { severityBadge } from "@/lib/colors";
-import type { TableStat, IndexStat } from "@/types/model";
+import type { TableStat, IndexStat, TableRecommendation } from "@/types/model";
 
 function BloatBar({ ratio }: { ratio: number }) {
   const pct = Math.min(ratio * 100, 100);
@@ -60,6 +63,12 @@ function BloatBar({ ratio }: { ratio: number }) {
 export default function TablesPage() {
   const { activeTargetId } = useActiveTarget();
   const [search, setSearch] = useState("");
+  const [runningRec, setRunningRec] = useState<number | null>(null);
+  const [confirmDrop, setConfirmDrop] = useState<{
+    rec: TableRecommendation;
+    index: number;
+  } | null>(null);
+  const toast = useToast();
 
   const { data, loading, refetch } = useQuery(
     () => liveApi.tableStats(activeTargetId ?? ""),
@@ -76,6 +85,61 @@ export default function TablesPage() {
   const indexes = (data?.indexes ?? []).filter(
     (i) => !search || i.indexName.toLowerCase().includes(search.toLowerCase()),
   );
+
+  function splitTargetName(targetName: string): [string, string] | null {
+    const dotIndex = targetName.indexOf(".");
+    if (dotIndex === -1) return null;
+    return [targetName.slice(0, dotIndex), targetName.slice(dotIndex + 1)];
+  }
+
+  async function handleRunVacuum(rec: TableRecommendation, index: number) {
+    const parts = splitTargetName(rec.targetName);
+    if (!parts || !activeTargetId) return;
+    const [schema, table] = parts;
+    setRunningRec(index);
+    try {
+      await maintenanceApi.vacuumTable(activeTargetId, schema, table);
+      toast({
+        type: "success",
+        title: "VACUUM boshlandi",
+        message: `${rec.targetName} — natijani kuzatish uchun Vacuum sahifasiga o'ting`,
+      });
+    } catch (err) {
+      toast({
+        type: "error",
+        title: "VACUUM boshlanmadi",
+        message: (err as Error).message,
+      });
+    } finally {
+      setRunningRec(null);
+    }
+  }
+
+  async function handleConfirmDropIndex() {
+    if (!confirmDrop || !activeTargetId) return;
+    const parts = splitTargetName(confirmDrop.rec.targetName);
+    if (!parts) return;
+    const [schema, index] = parts;
+    setRunningRec(confirmDrop.index);
+    try {
+      await maintenanceApi.dropUnusedIndex(activeTargetId, schema, index);
+      toast({
+        type: "success",
+        title: "Indeks o'chirilmoqda",
+        message: confirmDrop.rec.targetName,
+      });
+      setConfirmDrop(null);
+      setTimeout(refetch, 2000);
+    } catch (err) {
+      toast({
+        type: "error",
+        title: "O'chirib bo'lmadi",
+        message: (err as Error).message,
+      });
+    } finally {
+      setRunningRec(null);
+    }
+  }
 
   return (
     <>
@@ -111,7 +175,6 @@ export default function TablesPage() {
           </div>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
           <Card padding="sm">
             <StatBox
@@ -162,7 +225,6 @@ export default function TablesPage() {
           </Card>
         </div>
 
-        {/* Recommendations */}
         {(data?.recommendations?.length ?? 0) > 0 && (
           <Card className="mb-5">
             <CardHeader
@@ -195,11 +257,73 @@ export default function TablesPage() {
                       <CopyButton text={rec.command} />
                     </div>
                   </div>
+                  {rec.type === "vacuum" && (
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      icon={<Play size={11} />}
+                      loading={runningRec === i}
+                      onClick={() => handleRunVacuum(rec, i)}
+                      className="shrink-0"
+                    >
+                      Ishga tushirish
+                    </Button>
+                  )}
+                  {rec.type === "unused_index" && (
+                    <Button
+                      size="xs"
+                      variant="danger"
+                      icon={<Trash2 size={11} />}
+                      loading={runningRec === i}
+                      onClick={() => setConfirmDrop({ rec, index: i })}
+                      className="shrink-0"
+                    >
+                      O'chirish
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
           </Card>
         )}
+
+        <Modal
+          open={!!confirmDrop}
+          onClose={() => setConfirmDrop(null)}
+          title="Indeksni o'chirishni tasdiqlang"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setConfirmDrop(null)}>
+                Bekor qilish
+              </Button>
+              <Button
+                variant="danger"
+                icon={<Trash2 size={14} />}
+                onClick={handleConfirmDropIndex}
+                loading={runningRec !== null}
+              >
+                Ha, o'chirish
+              </Button>
+            </>
+          }
+        >
+          {confirmDrop && (
+            <div className="space-y-3">
+              <p className="text-sm text-secondary">
+                <code className="mono text-brand-500">
+                  {confirmDrop.rec.targetName}
+                </code>{" "}
+                indeksi o'chiriladi. Backend bu amalni bajarishdan oldin indeks
+                hali ham ishlatilmayotganini va constraint'ga (primary
+                key/unique) tegishli emasligini qayta tekshiradi.
+              </p>
+              <div className="text-xs text-yellow-500 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-500/10 rounded-lg px-3 py-2">
+                Bu amalni qaytarib bo'lmaydi — indeksni qayta yaratish uchun uni
+                noldan yaratishga to'g'ri keladi.
+              </div>
+            </div>
+          )}
+        </Modal>
 
         <Tabs defaultValue="tables">
           <TabList>
