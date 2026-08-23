@@ -23,6 +23,7 @@ import type {
   JobProgressSnapshot,
   Backup,
   SecurityAuditReport,
+  HealthScoreReport,
 } from "@/types/model";
 
 export const targetsApi = {
@@ -130,6 +131,10 @@ export const liveApi = {
       .then((r) => r.data),
   diagnostics: (tid: string) =>
     http.get<DiagnosticsReport>(`/live/${tid}/diagnostics`).then((r) => r.data),
+  healthScore: (tid: string) =>
+    http
+      .get<HealthScoreReport>(`/live/${tid}/health-score`)
+      .then((r) => r.data),
   databaseStats: (tid: string) =>
     http
       .get<DatabaseStatsSnapshot>(`/live/${tid}/database`)
@@ -166,7 +171,6 @@ export const backupsApi = {
     http.post<Backup>(`/targets/${tid}/backups`).then((r) => r.data),
   remove: (tid: string, backupId: string) =>
     http.delete(`/targets/${tid}/backups/${backupId}`).then((r) => r.data),
-
   download: (tid: string, backupId: string) =>
     http
       .get(`/targets/${tid}/backups/${backupId}/download`, {
