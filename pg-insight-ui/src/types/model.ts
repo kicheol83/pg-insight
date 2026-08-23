@@ -515,3 +515,18 @@ export interface Backup {
   completedAt: string | null;
   triggeredByUserId: string | null;
 }
+
+export interface SecurityCheck {
+  id: string;
+  title: string;
+  status: "ok" | "warning" | "info" | "unavailable";
+  message: string;
+  items?: string[];
+  recommendation?: string;
+}
+
+export interface SecurityAuditReport {
+  targetId: string;
+  checkedAt: string;
+  checks: SecurityCheck[];
+}

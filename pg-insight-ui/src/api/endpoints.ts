@@ -22,6 +22,7 @@ import type {
   IoStatsSnapshot,
   JobProgressSnapshot,
   Backup,
+  SecurityAuditReport,
 } from "@/types/model";
 
 export const targetsApi = {
@@ -165,6 +166,7 @@ export const backupsApi = {
     http.post<Backup>(`/targets/${tid}/backups`).then((r) => r.data),
   remove: (tid: string, backupId: string) =>
     http.delete(`/targets/${tid}/backups/${backupId}`).then((r) => r.data),
+
   download: (tid: string, backupId: string) =>
     http
       .get(`/targets/${tid}/backups/${backupId}/download`, {
@@ -188,4 +190,9 @@ export const maintenanceApi = {
         index: string;
       }>(`/maintenance/${tid}/index`, { data: { schema, index } })
       .then((r) => r.data),
+};
+
+export const securityApi = {
+  audit: (tid: string) =>
+    http.get<SecurityAuditReport>(`/security/${tid}/audit`).then((r) => r.data),
 };
