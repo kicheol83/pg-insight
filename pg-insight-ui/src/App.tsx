@@ -6,6 +6,8 @@ import { AppProvider } from "@/store/app";
 import { ThemeProvider } from "@/store/theme";
 import { AuthProvider, useAuth } from "@/store/auth";
 import { ToastProvider, Spinner } from "@/components/ui";
+import IoMonitoringPage from "./pages/io/IomonitoringPage";
+import JobProgressPage from "./pages/job-progress/JobProgressPage";
 
 const DashboardPage = lazy(() => import("./pages/dashboard/DashboardPage"));
 const TargetsPage = lazy(() => import("./pages/targets/TargetsPage"));
@@ -24,6 +26,8 @@ const SettingsPage = lazy(() => import("./pages/settings/SettingsPage"));
 const DiagnosticsPage = lazy(
   () => import("./pages/diagnostics/DiagnosticsPage"),
 );
+const DatabasePage = lazy(() => import("./pages/database/DatabasePage"));
+
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 
 function PageLoader() {
@@ -34,6 +38,9 @@ function PageLoader() {
   );
 }
 
+// Token bo'lmasa /login'ga qaytaradi. Backend har bir so'rovda
+// tokenni tekshiradi (401 kelsa http.ts o'zi ham qaytaradi) —
+// bu esa ilk yuklanishda keraksiz "chaqnash"ni oldini oladi.
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
@@ -64,6 +71,10 @@ export default function App() {
                                   element={<TargetsPage />}
                                 />
                                 <Route
+                                  path="/database"
+                                  element={<DatabasePage />}
+                                />
+                                <Route
                                   path="/connections"
                                   element={<ConnectionsPage />}
                                 />
@@ -77,8 +88,16 @@ export default function App() {
                                   element={<TablesPage />}
                                 />
                                 <Route
+                                  path="/io"
+                                  element={<IoMonitoringPage />}
+                                />
+                                <Route
                                   path="/vacuum"
                                   element={<VacuumPage />}
+                                />
+                                <Route
+                                  path="/job-progress"
+                                  element={<JobProgressPage />}
                                 />
                                 <Route
                                   path="/replication"
