@@ -18,6 +18,12 @@ import type {
   ConnectionTrendPoint,
   TimePoint,
   DiagnosticsReport,
+  DatabaseStatsSnapshot,
+  IoStatsSnapshot,
+  JobProgressSnapshot,
+  Backup,
+  SecurityAuditReport,
+  HealthScoreReport,
 } from "@/types/model";
 
 export const targetsApi = {
@@ -125,6 +131,20 @@ export const liveApi = {
       .then((r) => r.data),
   diagnostics: (tid: string) =>
     http.get<DiagnosticsReport>(`/live/${tid}/diagnostics`).then((r) => r.data),
+  healthScore: (tid: string) =>
+    http
+      .get<HealthScoreReport>(`/live/${tid}/health-score`)
+      .then((r) => r.data),
+  databaseStats: (tid: string) =>
+    http
+      .get<DatabaseStatsSnapshot>(`/live/${tid}/database`)
+      .then((r) => r.data),
+  ioStats: (tid: string) =>
+    http.get<IoStatsSnapshot>(`/live/${tid}/io`).then((r) => r.data),
+  jobProgress: (tid: string) =>
+    http
+      .get<JobProgressSnapshot>(`/live/${tid}/job-progress`)
+      .then((r) => r.data),
 };
 
 export const alertsApi = {
@@ -142,4 +162,41 @@ export const alertsApi = {
     http.get<AlertEvent[]>(`/alerts/${tid}/events/active`).then((r) => r.data),
   acknowledge: (id: string) =>
     http.patch(`/alerts/events/${id}/ack`).then((r) => r.data),
+};
+
+export const backupsApi = {
+  list: (tid: string) =>
+    http.get<Backup[]>(`/targets/${tid}/backups`).then((r) => r.data),
+  start: (tid: string) =>
+    http.post<Backup>(`/targets/${tid}/backups`).then((r) => r.data),
+  remove: (tid: string, backupId: string) =>
+    http.delete(`/targets/${tid}/backups/${backupId}`).then((r) => r.data),
+  download: (tid: string, backupId: string) =>
+    http
+      .get(`/targets/${tid}/backups/${backupId}/download`, {
+        responseType: "blob",
+      })
+      .then((r) => r.data as Blob),
+};
+
+export const maintenanceApi = {
+  vacuumTable: (tid: string, schema: string, table: string) =>
+    http
+      .post<{
+        started: true;
+        target: string;
+      }>(`/maintenance/${tid}/vacuum`, { schema, table })
+      .then((r) => r.data),
+  dropUnusedIndex: (tid: string, schema: string, index: string) =>
+    http
+      .delete<{
+        started: true;
+        index: string;
+      }>(`/maintenance/${tid}/index`, { data: { schema, index } })
+      .then((r) => r.data),
+};
+
+export const securityApi = {
+  audit: (tid: string) =>
+    http.get<SecurityAuditReport>(`/security/${tid}/audit`).then((r) => r.data),
 };

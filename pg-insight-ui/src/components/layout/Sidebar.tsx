@@ -13,6 +13,9 @@ import {
   Stethoscope,
   ChevronLeft,
   ChevronRight,
+  Server,
+  HardDrive,
+  ListChecks,
 } from "lucide-react";
 import { cn } from "@/lib/format";
 import { useAppStore } from "@/store/app";
@@ -21,11 +24,14 @@ import { LiveDot, Badge } from "@/components/ui";
 const NAV_ITEMS = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard", exact: true },
   { to: "/targets", icon: Database, label: "Targets" },
+  { to: "/database", icon: Server, label: "Database" },
   { to: "/connections", icon: Wifi, label: "Connections" },
   { to: "/queries", icon: Zap, label: "Queries" },
   { to: "/locks", icon: Lock, label: "Locks" },
   { to: "/tables", icon: Activity, label: "Tables & Indexes" },
+  { to: "/io", icon: HardDrive, label: "I/O" },
   { to: "/vacuum", icon: Trash2, label: "Vacuum" },
+  { to: "/job-progress", icon: ListChecks, label: "Job Progress" },
   { to: "/replication", icon: GitBranch, label: "Replication" },
   { to: "/alerts", icon: Bell, label: "Alerts" },
   { to: "/settings", icon: Settings, label: "Settings" },

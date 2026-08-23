@@ -375,3 +375,174 @@ export interface DiagnosticsReport {
   overallStatus: "healthy" | "degraded" | "broken";
   checks: DiagnosticCheck[];
 }
+
+export interface DatabaseStat {
+  name: string;
+  numBackends: number;
+  xactCommit: number;
+  xactRollback: number;
+  commitRatio: number;
+  blksRead: number;
+  blksHit: number;
+  cacheHitRatio: number;
+  tupReturned: number;
+  tupFetched: number;
+  tupInserted: number;
+  tupUpdated: number;
+  tupDeleted: number;
+  conflicts: number;
+  tempFiles: number;
+  tempBytes: number;
+  deadlocks: number;
+  checksumFailures: number;
+  blkReadTimeMs: number;
+  blkWriteTimeMs: number;
+  statsReset: string | null;
+}
+
+export interface DatabaseStatsSnapshot {
+  databases: DatabaseStat[];
+  trackIoTimingEnabled: boolean;
+}
+
+export interface IoStatRow {
+  backendType: string;
+  object: string;
+  context: string;
+  reads: number;
+  writes: number;
+  extends: number;
+  hits: number;
+  evictions: number;
+  reuses: number;
+  fsyncs: number;
+  readTimeMs: number;
+  writeTimeMs: number;
+  extendTimeMs: number;
+  fsyncTimeMs: number;
+}
+
+export interface IoStatsSnapshot {
+  source: "pg_stat_io" | "pg_statio_fallback";
+  pgStatIoAvailable: boolean;
+  trackIoTimingEnabled: boolean;
+  rows?: IoStatRow[];
+  byBackendType?: Array<{
+    backendType: string;
+    reads: number;
+    writes: number;
+    extends: number;
+  }>;
+  fallback?: {
+    heapBlksRead: number;
+    heapBlksHit: number;
+    idxBlksRead: number;
+    idxBlksHit: number;
+    toastBlksRead: number;
+    toastBlksHit: number;
+    cacheHitRatio: number;
+  };
+}
+
+export interface CreateIndexProgress {
+  pid: number;
+  tableName: string;
+  schemaName: string;
+  command: string;
+  phase: string;
+  blocksTotal: number;
+  blocksDone: number;
+  tuplesTotal: number;
+  tuplesDone: number;
+  progressPct: number;
+}
+
+export interface ClusterProgress {
+  pid: number;
+  tableName: string;
+  schemaName: string;
+  command: string;
+  phase: string;
+  heapTuplesScanned: number;
+  heapTuplesWritten: number;
+  heapBlksTotal: number;
+  heapBlksScanned: number;
+  progressPct: number;
+}
+
+export interface AnalyzeProgress {
+  pid: number;
+  tableName: string;
+  schemaName: string;
+  phase: string;
+  sampleBlksTotal: number;
+  sampleBlksScanned: number;
+  childTablesTotal: number;
+  childTablesDone: number;
+  progressPct: number;
+}
+
+export interface CopyProgress {
+  pid: number;
+  tableName: string | null;
+  schemaName: string | null;
+  command: string;
+  type: string;
+  bytesProcessed: number;
+  bytesTotal: number;
+  tuplesProcessed: number;
+  tuplesExcluded: number;
+  progressPct: number;
+}
+
+export interface JobProgressSnapshot {
+  createIndex: CreateIndexProgress[];
+  cluster: ClusterProgress[];
+  analyze: AnalyzeProgress[];
+  copy: CopyProgress[];
+  totalActive: number;
+}
+
+export interface Backup {
+  id: string;
+  targetId: string;
+  status: "running" | "completed" | "failed";
+  format: string;
+  filePath: string | null;
+  fileSizeBytes: string | null;
+  errorMessage: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  triggeredByUserId: string | null;
+}
+
+export interface SecurityCheck {
+  id: string;
+  title: string;
+  status: "ok" | "warning" | "info" | "unavailable";
+  message: string;
+  items?: string[];
+  recommendation?: string;
+}
+
+export interface SecurityAuditReport {
+  targetId: string;
+  checkedAt: string;
+  checks: SecurityCheck[];
+}
+
+export interface HealthFactor {
+  id: string;
+  label: string;
+  status: "ok" | "info" | "warning" | "critical";
+  impact: number;
+  detail?: string;
+}
+
+export interface HealthScoreReport {
+  targetId: string;
+  checkedAt: string;
+  score: number;
+  grade: "excellent" | "good" | "fair" | "poor";
+  factors: HealthFactor[];
+}
