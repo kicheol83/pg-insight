@@ -187,4 +187,45 @@ export class LiveController {
   async diagnostics(@Param('targetId') targetId: string) {
     return this.liveQuery.getDiagnostics(targetId);
   }
+
+  @Get('database')
+  @ApiOperation({
+    summary: 'Get database-level cumulative statistics (pg_stat_database)',
+    description:
+      'Commit/rollback ratio, cache hit ratio, temp file usage, deadlocks — one row per database on the server.',
+  })
+  async databaseStats(@Param('targetId') targetId: string) {
+    return this.liveQuery.getDatabaseStats(targetId);
+  }
+
+  @Get('io')
+  @ApiOperation({
+    summary:
+      'Get I/O statistics (pg_stat_io on PG16+, pg_statio_user_tables fallback otherwise)',
+    description:
+      'Breaks down disk reads/writes/extends by backend type and context — shows which process is driving I/O pressure.',
+  })
+  async ioStats(@Param('targetId') targetId: string) {
+    return this.liveQuery.getIoStats(targetId);
+  }
+
+  @Get('job-progress')
+  @ApiOperation({
+    summary: 'Get progress of long-running maintenance operations',
+    description:
+      'CREATE INDEX, CLUSTER/VACUUM FULL, ANALYZE, and COPY progress — complements the dedicated VACUUM progress endpoint. Each check degrades gracefully on older PostgreSQL versions that lack the relevant progress view.',
+  })
+  async jobProgress(@Param('targetId') targetId: string) {
+    return this.liveQuery.getJobProgress(targetId);
+  }
+
+  @Get('health-score')
+  @ApiOperation({
+    summary: 'Get an aggregate 0-100 health score for this target',
+    description:
+      'Different from /diagnostics: diagnostics checks whether monitoring CAN work (permissions/connectivity); health-score assesses whether the database IS healthy (bloat, XID age, cache hit ratio, replication lag, connection pool usage, backup freshness).',
+  })
+  async healthScore(@Param('targetId') targetId: string) {
+    return this.liveQuery.getHealthScore(targetId);
+  }
 }

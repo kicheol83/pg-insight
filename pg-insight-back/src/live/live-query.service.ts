@@ -1,11 +1,15 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { TargetPoolManager } from '../targets/target-pool.manager';
+import { PrismaService } from '../database/prisma.service';
 
 @Injectable()
 export class LiveQueryService {
   private readonly logger = new Logger(LiveQueryService.name);
 
-  constructor(private readonly poolManager: TargetPoolManager) {}
+  constructor(
+    private readonly poolManager: TargetPoolManager,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async getConnections(targetId: string, minMs = 0, limit = 200, offset = 0) {
     const rows = await this.poolManager.query<Record<string, unknown>>(
@@ -693,7 +697,6 @@ export class LiveQueryService {
     };
   }
 
-  // ── Replication ─────────────────────────────────────────────────
   async getReplication(targetId: string) {
     const recoveryRows = await this.poolManager.query<{ is_recovery: boolean }>(
       targetId,
@@ -1202,6 +1205,554 @@ export class LiveQueryService {
       checks,
     };
   }
+
+  async getDatabaseStats(targetId: string): Promise<DatabaseStatsSnapshot> {
+    const rows = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT
+        d.datname AS name,
+        s.numbackends AS num_backends,
+        s.xact_commit, s.xact_rollback,
+        s.blks_read, s.blks_hit,
+        s.tup_returned, s.tup_fetched, s.tup_inserted, s.tup_updated, s.tup_deleted,
+        s.conflicts, s.temp_files, s.temp_bytes, s.deadlocks,
+        s.checksum_failures,
+        s.blk_read_time, s.blk_write_time,
+        s.stats_reset
+      FROM pg_stat_database s
+      JOIN pg_database d ON d.oid = s.datid
+      WHERE NOT d.datistemplate AND d.datname IS NOT NULL
+      ORDER BY (s.blks_hit + s.blks_read) DESC
+    `,
+    );
+
+    const trackIoTimingRows = await this.poolManager.query<{ setting: string }>(
+      targetId,
+      `SELECT setting FROM pg_settings WHERE name = 'track_io_timing'`,
+    );
+    const trackIoTimingEnabled = trackIoTimingRows[0]?.setting === 'on';
+
+    const databases = rows.map((r) => {
+      const blksRead = Number(r.blks_read) || 0;
+      const blksHit = Number(r.blks_hit) || 0;
+      const xactCommit = Number(r.xact_commit) || 0;
+      const xactRollback = Number(r.xact_rollback) || 0;
+      const totalBlks = blksRead + blksHit;
+      const totalXact = xactCommit + xactRollback;
+
+      return {
+        name: String(r.name),
+        numBackends: Number(r.num_backends) || 0,
+        xactCommit,
+        xactRollback,
+        commitRatio: totalXact > 0 ? xactCommit / totalXact : 1,
+        blksRead,
+        blksHit,
+        cacheHitRatio: totalBlks > 0 ? blksHit / totalBlks : 1,
+        tupReturned: Number(r.tup_returned) || 0,
+        tupFetched: Number(r.tup_fetched) || 0,
+        tupInserted: Number(r.tup_inserted) || 0,
+        tupUpdated: Number(r.tup_updated) || 0,
+        tupDeleted: Number(r.tup_deleted) || 0,
+        conflicts: Number(r.conflicts) || 0,
+        tempFiles: Number(r.temp_files) || 0,
+        tempBytes: Number(r.temp_bytes) || 0,
+        deadlocks: Number(r.deadlocks) || 0,
+        checksumFailures: Number(r.checksum_failures) || 0,
+        blkReadTimeMs: Number(r.blk_read_time) || 0,
+        blkWriteTimeMs: Number(r.blk_write_time) || 0,
+        statsReset: r.stats_reset ? String(r.stats_reset) : null,
+      };
+    });
+
+    return { databases, trackIoTimingEnabled };
+  }
+
+  async getIoStats(targetId: string): Promise<IoStatsSnapshot> {
+    const entry = this.poolManager.getEntry(targetId);
+    const pgVersionNum = entry?.pgVersionNum ?? 0;
+
+    const trackIoTimingRows = await this.poolManager.query<{ setting: string }>(
+      targetId,
+      `SELECT setting FROM pg_settings WHERE name = 'track_io_timing'`,
+    );
+    const trackIoTimingEnabled = trackIoTimingRows[0]?.setting === 'on';
+
+    if (pgVersionNum >= 160000) {
+      try {
+        const rows = await this.poolManager.query<Record<string, unknown>>(
+          targetId,
+          `
+          SELECT backend_type, object, context,
+            reads, writes, extends, hits, evictions, reuses, fsyncs,
+            read_time, write_time, extend_time, fsync_time
+          FROM pg_stat_io
+          WHERE reads > 0 OR writes > 0 OR extends > 0 OR hits > 0
+          ORDER BY reads DESC, writes DESC
+        `,
+        );
+
+        const ioRows: IoStatRow[] = rows.map((r) => ({
+          backendType: String(r.backend_type),
+          object: String(r.object),
+          context: String(r.context),
+          reads: Number(r.reads) || 0,
+          writes: Number(r.writes) || 0,
+          extends: Number(r.extends) || 0,
+          hits: Number(r.hits) || 0,
+          evictions: Number(r.evictions) || 0,
+          reuses: Number(r.reuses) || 0,
+          fsyncs: Number(r.fsyncs) || 0,
+          readTimeMs: Number(r.read_time) || 0,
+          writeTimeMs: Number(r.write_time) || 0,
+          extendTimeMs: Number(r.extend_time) || 0,
+          fsyncTimeMs: Number(r.fsync_time) || 0,
+        }));
+
+        const byBackendMap = new Map<
+          string,
+          { reads: number; writes: number; extends: number }
+        >();
+        for (const row of ioRows) {
+          const acc = byBackendMap.get(row.backendType) ?? {
+            reads: 0,
+            writes: 0,
+            extends: 0,
+          };
+          acc.reads += row.reads;
+          acc.writes += row.writes;
+          acc.extends += row.extends;
+          byBackendMap.set(row.backendType, acc);
+        }
+        const byBackendType = Array.from(
+          byBackendMap,
+          ([backendType, stats]) => ({ backendType, ...stats }),
+        ).sort((a, b) => b.reads + b.writes - (a.reads + a.writes));
+
+        return {
+          source: 'pg_stat_io',
+          pgStatIoAvailable: true,
+          trackIoTimingEnabled,
+          rows: ioRows,
+          byBackendType,
+        };
+      } catch {}
+    }
+
+    const fallbackRows = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT
+        COALESCE(SUM(heap_blks_read), 0)  AS heap_blks_read,
+        COALESCE(SUM(heap_blks_hit), 0)   AS heap_blks_hit,
+        COALESCE(SUM(idx_blks_read), 0)   AS idx_blks_read,
+        COALESCE(SUM(idx_blks_hit), 0)    AS idx_blks_hit,
+        COALESCE(SUM(toast_blks_read), 0) AS toast_blks_read,
+        COALESCE(SUM(toast_blks_hit), 0)  AS toast_blks_hit
+      FROM pg_statio_user_tables
+    `,
+    );
+    const f = fallbackRows[0] ?? {};
+    const heapRead = Number(f.heap_blks_read) || 0;
+    const heapHit = Number(f.heap_blks_hit) || 0;
+    const idxRead = Number(f.idx_blks_read) || 0;
+    const idxHit = Number(f.idx_blks_hit) || 0;
+    const totalRead = heapRead + idxRead;
+    const totalHit = heapHit + idxHit;
+
+    return {
+      source: 'pg_statio_fallback',
+      pgStatIoAvailable: false,
+      trackIoTimingEnabled,
+      fallback: {
+        heapBlksRead: heapRead,
+        heapBlksHit: heapHit,
+        idxBlksRead: idxRead,
+        idxBlksHit: idxHit,
+        toastBlksRead: Number(f.toast_blks_read) || 0,
+        toastBlksHit: Number(f.toast_blks_hit) || 0,
+        cacheHitRatio:
+          totalRead + totalHit > 0 ? totalHit / (totalRead + totalHit) : 1,
+      },
+    };
+  }
+
+  async getJobProgress(targetId: string): Promise<JobProgressSnapshot> {
+    const [createIndex, cluster, analyze, copy] = await Promise.all([
+      this.safeProgressQuery(
+        targetId,
+        `
+        SELECT p.pid, c.relname AS table_name, n.nspname AS schema_name,
+          p.command, p.phase,
+          p.blocks_total, p.blocks_done,
+          p.tuples_total, p.tuples_done
+        FROM pg_stat_progress_create_index p
+        JOIN pg_class c ON c.oid = p.relid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+      `,
+        (r) => ({
+          pid: Number(r.pid),
+          tableName: String(r.table_name),
+          schemaName: String(r.schema_name),
+          command: String(r.command),
+          phase: String(r.phase),
+          blocksTotal: Number(r.blocks_total) || 0,
+          blocksDone: Number(r.blocks_done) || 0,
+          tuplesTotal: Number(r.tuples_total) || 0,
+          tuplesDone: Number(r.tuples_done) || 0,
+          progressPct:
+            Number(r.blocks_total) > 0
+              ? (Number(r.blocks_done) / Number(r.blocks_total)) * 100
+              : 0,
+        }),
+      ),
+
+      this.safeProgressQuery(
+        targetId,
+        `
+        SELECT p.pid, c.relname AS table_name, n.nspname AS schema_name,
+          p.command, p.phase,
+          p.heap_tuples_scanned, p.heap_tuples_written,
+          p.heap_blks_total, p.heap_blks_scanned
+        FROM pg_stat_progress_cluster p
+        JOIN pg_class c ON c.oid = p.relid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+      `,
+        (r) => ({
+          pid: Number(r.pid),
+          tableName: String(r.table_name),
+          schemaName: String(r.schema_name),
+          command: String(r.command),
+          phase: String(r.phase),
+          heapTuplesScanned: Number(r.heap_tuples_scanned) || 0,
+          heapTuplesWritten: Number(r.heap_tuples_written) || 0,
+          heapBlksTotal: Number(r.heap_blks_total) || 0,
+          heapBlksScanned: Number(r.heap_blks_scanned) || 0,
+          progressPct:
+            Number(r.heap_blks_total) > 0
+              ? (Number(r.heap_blks_scanned) / Number(r.heap_blks_total)) * 100
+              : 0,
+        }),
+      ),
+
+      this.safeProgressQuery(
+        targetId,
+        `
+        SELECT p.pid, c.relname AS table_name, n.nspname AS schema_name,
+          p.phase,
+          p.sample_blks_total, p.sample_blks_scanned,
+          p.child_tables_total, p.child_tables_done
+        FROM pg_stat_progress_analyze p
+        JOIN pg_class c ON c.oid = p.relid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+      `,
+        (r) => ({
+          pid: Number(r.pid),
+          tableName: String(r.table_name),
+          schemaName: String(r.schema_name),
+          phase: String(r.phase),
+          sampleBlksTotal: Number(r.sample_blks_total) || 0,
+          sampleBlksScanned: Number(r.sample_blks_scanned) || 0,
+          childTablesTotal: Number(r.child_tables_total) || 0,
+          childTablesDone: Number(r.child_tables_done) || 0,
+          progressPct:
+            Number(r.sample_blks_total) > 0
+              ? (Number(r.sample_blks_scanned) / Number(r.sample_blks_total)) *
+                100
+              : 0,
+        }),
+      ),
+
+      this.safeProgressQuery(
+        targetId,
+        `
+        SELECT p.pid, c.relname AS table_name, n.nspname AS schema_name,
+          p.command, p.type,
+          p.bytes_processed, p.bytes_total,
+          p.tuples_processed, p.tuples_excluded
+        FROM pg_stat_progress_copy p
+        LEFT JOIN pg_class c ON c.oid = p.relid
+        LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+      `,
+        (r) => ({
+          pid: Number(r.pid),
+          tableName: r.table_name ? String(r.table_name) : null,
+          schemaName: r.schema_name ? String(r.schema_name) : null,
+          command: String(r.command),
+          type: String(r.type),
+          bytesProcessed: Number(r.bytes_processed) || 0,
+          bytesTotal: Number(r.bytes_total) || 0,
+          tuplesProcessed: Number(r.tuples_processed) || 0,
+          tuplesExcluded: Number(r.tuples_excluded) || 0,
+          progressPct:
+            Number(r.bytes_total) > 0
+              ? (Number(r.bytes_processed) / Number(r.bytes_total)) * 100
+              : 0,
+        }),
+      ),
+    ]);
+
+    return {
+      createIndex,
+      cluster,
+      analyze,
+      copy,
+      totalActive:
+        createIndex.length + cluster.length + analyze.length + copy.length,
+    };
+  }
+
+  private async safeProgressQuery<T>(
+    targetId: string,
+    sql: string,
+    mapRow: (r: Record<string, unknown>) => T,
+  ): Promise<T[]> {
+    try {
+      const rows = await this.poolManager.query<Record<string, unknown>>(
+        targetId,
+        sql,
+      );
+      return rows.map(mapRow);
+    } catch {
+      return [];
+    }
+  }
+
+  async getHealthScore(targetId: string): Promise<HealthScoreReport> {
+    const [vacuum, tables, database, replication, connections] =
+      await Promise.all([
+        this.getVacuumProgress(targetId).catch(() => null),
+        this.getTableStats(targetId).catch(() => null),
+        this.getDatabaseStats(targetId).catch(() => null),
+        this.getReplication(targetId).catch(() => null),
+        this.getConnections(targetId).catch(() => null),
+      ]);
+
+    const factors: HealthFactor[] = [];
+    let score = 100;
+
+    if (vacuum) {
+      if (vacuum.maxXidAge >= 1_500_000_000) {
+        score -= 25;
+        factors.push({
+          id: 'xid_age',
+          label: 'XID wraparound xavfi',
+          status: 'critical',
+          impact: -25,
+          detail: `Max XID yoshi: ${vacuum.maxXidAge.toLocaleString()} — favqulodda VACUUM FREEZE kerak`,
+        });
+      } else if (vacuum.hasXidRisk) {
+        score -= 12;
+        factors.push({
+          id: 'xid_age',
+          label: 'XID wraparound xavfi',
+          status: 'warning',
+          impact: -12,
+          detail: `Max XID yoshi: ${vacuum.maxXidAge.toLocaleString()}`,
+        });
+      } else {
+        factors.push({
+          id: 'xid_age',
+          label: 'XID wraparound xavfi',
+          status: 'ok',
+          impact: 0,
+        });
+      }
+    }
+
+    // 2) Jadval bloat
+    if (tables) {
+      const maxBloat = Math.max(0, ...tables.tables.map((t) => t.bloatRatio));
+      if (maxBloat >= 0.4) {
+        score -= 15;
+        factors.push({
+          id: 'bloat',
+          label: 'Jadval bloat',
+          status: 'critical',
+          impact: -15,
+          detail: `Eng yuqori bloat: ${(maxBloat * 100).toFixed(0)}% (${tables.tablesNeedingVacuum} ta jadval VACUUM kutmoqda)`,
+        });
+      } else if (tables.tablesNeedingVacuum > 0) {
+        score -= 6;
+        factors.push({
+          id: 'bloat',
+          label: 'Jadval bloat',
+          status: 'warning',
+          impact: -6,
+          detail: `${tables.tablesNeedingVacuum} ta jadval VACUUM kutmoqda`,
+        });
+      } else {
+        factors.push({
+          id: 'bloat',
+          label: 'Jadval bloat',
+          status: 'ok',
+          impact: 0,
+        });
+      }
+    }
+
+    if (database && database.databases.length > 0) {
+      const avgHit =
+        database.databases.reduce((s, d) => s + d.cacheHitRatio, 0) /
+        database.databases.length;
+      if (avgHit < 0.9) {
+        score -= 15;
+        factors.push({
+          id: 'cache_hit',
+          label: 'Buffer cache hit ratio',
+          status: 'critical',
+          impact: -15,
+          detail: `O'rtacha: ${(avgHit * 100).toFixed(1)}% — shared_buffers yetarli emasligini bildirishi mumkin`,
+        });
+      } else if (avgHit < 0.98) {
+        score -= 5;
+        factors.push({
+          id: 'cache_hit',
+          label: 'Buffer cache hit ratio',
+          status: 'warning',
+          impact: -5,
+          detail: `O'rtacha: ${(avgHit * 100).toFixed(1)}%`,
+        });
+      } else {
+        factors.push({
+          id: 'cache_hit',
+          label: 'Buffer cache hit ratio',
+          status: 'ok',
+          impact: 0,
+        });
+      }
+    }
+
+    if (replication && replication.hasReplicas) {
+      if (replication.hasLaggedReplicas) {
+        score -= 10;
+        factors.push({
+          id: 'replication_lag',
+          label: 'Replikatsiya lag',
+          status: 'warning',
+          impact: -10,
+          detail: `Maksimal lag: ${(replication.maxLagBytes / 1024 / 1024).toFixed(1)} MB`,
+        });
+      } else {
+        factors.push({
+          id: 'replication_lag',
+          label: 'Replikatsiya lag',
+          status: 'ok',
+          impact: 0,
+        });
+      }
+    }
+
+    if (connections) {
+      if (connections.connectionUsagePct >= 90) {
+        score -= 15;
+        factors.push({
+          id: 'connection_pool',
+          label: 'Connection pool holati',
+          status: 'critical',
+          impact: -15,
+          detail: `${connections.connectionUsagePct.toFixed(0)}% band — yangi ulanishlar rad etilishi mumkin`,
+        });
+      } else if (connections.connectionUsagePct >= 75) {
+        score -= 5;
+        factors.push({
+          id: 'connection_pool',
+          label: 'Connection pool holati',
+          status: 'warning',
+          impact: -5,
+          detail: `${connections.connectionUsagePct.toFixed(0)}% band`,
+        });
+      } else {
+        factors.push({
+          id: 'connection_pool',
+          label: 'Connection pool holati',
+          status: 'ok',
+          impact: 0,
+        });
+      }
+    }
+
+    try {
+      const latestBackup = await this.latestCompletedBackup(targetId);
+      if (!latestBackup) {
+        score -= 15;
+        factors.push({
+          id: 'backup_freshness',
+          label: 'Backup yangiligi',
+          status: 'warning',
+          impact: -15,
+          detail: 'Hech qachon muvaffaqiyatli backup olinmagan',
+        });
+      } else {
+        const ageHours =
+          (Date.now() - latestBackup.completedAt.getTime()) / 3_600_000;
+        if (ageHours > 7 * 24) {
+          score -= 10;
+          factors.push({
+            id: 'backup_freshness',
+            label: 'Backup yangiligi',
+            status: 'warning',
+            impact: -10,
+            detail: `Oxirgi backup ${Math.floor(ageHours / 24)} kun oldin`,
+          });
+        } else if (ageHours > 24) {
+          score -= 3;
+          factors.push({
+            id: 'backup_freshness',
+            label: 'Backup yangiligi',
+            status: 'info',
+            impact: -3,
+            detail: `Oxirgi backup ${Math.floor(ageHours)} soat oldin`,
+          });
+        } else {
+          factors.push({
+            id: 'backup_freshness',
+            label: 'Backup yangiligi',
+            status: 'ok',
+            impact: 0,
+            detail: `Oxirgi backup ${Math.floor(ageHours)} soat oldin`,
+          });
+        }
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Health score: backup freshness check failed: ${(err as Error).message}`,
+      );
+    }
+
+    score = Math.max(0, Math.min(100, score));
+    const grade: HealthScoreReport['grade'] =
+      score >= 90
+        ? 'excellent'
+        : score >= 70
+          ? 'good'
+          : score >= 50
+            ? 'fair'
+            : 'poor';
+
+    return {
+      targetId,
+      checkedAt: new Date().toISOString(),
+      score,
+      grade,
+      factors,
+    };
+  }
+
+  private async latestCompletedBackup(
+    targetId: string,
+  ): Promise<{ completedAt: Date } | null> {
+    const db = this.prisma as unknown as Record<string, unknown>;
+    const backupModel = db['backup'] as {
+      findFirst: (args: unknown) => Promise<{ completedAt: Date } | null>;
+    };
+    return backupModel.findFirst({
+      where: { targetId, status: 'completed' },
+      orderBy: { completedAt: 'desc' },
+      select: { completedAt: true },
+    });
+  }
 }
 
 export interface DiagnosticCheck {
@@ -1221,4 +1772,147 @@ export interface DiagnosticsReport {
   pgVersion: string | null;
   overallStatus: 'healthy' | 'degraded' | 'broken';
   checks: DiagnosticCheck[];
+}
+
+export interface DatabaseStat {
+  name: string;
+  numBackends: number;
+  xactCommit: number;
+  xactRollback: number;
+  commitRatio: number;
+  blksRead: number;
+  blksHit: number;
+  cacheHitRatio: number;
+  tupReturned: number;
+  tupFetched: number;
+  tupInserted: number;
+  tupUpdated: number;
+  tupDeleted: number;
+  conflicts: number;
+  tempFiles: number;
+  tempBytes: number;
+  deadlocks: number;
+  checksumFailures: number;
+  blkReadTimeMs: number;
+  blkWriteTimeMs: number;
+  statsReset: string | null;
+}
+
+export interface DatabaseStatsSnapshot {
+  databases: DatabaseStat[];
+  trackIoTimingEnabled: boolean;
+}
+
+export interface IoStatRow {
+  backendType: string;
+  object: string;
+  context: string;
+  reads: number;
+  writes: number;
+  extends: number;
+  hits: number;
+  evictions: number;
+  reuses: number;
+  fsyncs: number;
+  readTimeMs: number;
+  writeTimeMs: number;
+  extendTimeMs: number;
+  fsyncTimeMs: number;
+}
+
+export interface IoStatsSnapshot {
+  source: 'pg_stat_io' | 'pg_statio_fallback';
+  pgStatIoAvailable: boolean;
+  trackIoTimingEnabled: boolean;
+  rows?: IoStatRow[];
+  byBackendType?: Array<{
+    backendType: string;
+    reads: number;
+    writes: number;
+    extends: number;
+  }>;
+  fallback?: {
+    heapBlksRead: number;
+    heapBlksHit: number;
+    idxBlksRead: number;
+    idxBlksHit: number;
+    toastBlksRead: number;
+    toastBlksHit: number;
+    cacheHitRatio: number;
+  };
+}
+
+export interface CreateIndexProgress {
+  pid: number;
+  tableName: string;
+  schemaName: string;
+  command: string;
+  phase: string;
+  blocksTotal: number;
+  blocksDone: number;
+  tuplesTotal: number;
+  tuplesDone: number;
+  progressPct: number;
+}
+
+export interface ClusterProgress {
+  pid: number;
+  tableName: string;
+  schemaName: string;
+  command: string;
+  phase: string;
+  heapTuplesScanned: number;
+  heapTuplesWritten: number;
+  heapBlksTotal: number;
+  heapBlksScanned: number;
+  progressPct: number;
+}
+
+export interface AnalyzeProgress {
+  pid: number;
+  tableName: string;
+  schemaName: string;
+  phase: string;
+  sampleBlksTotal: number;
+  sampleBlksScanned: number;
+  childTablesTotal: number;
+  childTablesDone: number;
+  progressPct: number;
+}
+
+export interface CopyProgress {
+  pid: number;
+  tableName: string | null;
+  schemaName: string | null;
+  command: string;
+  type: string;
+  bytesProcessed: number;
+  bytesTotal: number;
+  tuplesProcessed: number;
+  tuplesExcluded: number;
+  progressPct: number;
+}
+
+export interface JobProgressSnapshot {
+  createIndex: CreateIndexProgress[];
+  cluster: ClusterProgress[];
+  analyze: AnalyzeProgress[];
+  copy: CopyProgress[];
+  totalActive: number;
+}
+
+export interface HealthFactor {
+  id: string;
+  label: string;
+  status: 'ok' | 'info' | 'warning' | 'critical';
+  impact: number;
+  detail?: string;
+}
+
+export interface HealthScoreReport {
+  targetId: string;
+  checkedAt: string;
+  score: number; // 0-100
+  grade: 'excellent' | 'good' | 'fair' | 'poor';
+  factors: HealthFactor[];
 }
