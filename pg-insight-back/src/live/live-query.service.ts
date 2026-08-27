@@ -1008,11 +1008,11 @@ export class LiveQueryService {
         title: 'PostgreSQL versiyasi',
         affects: 'Vacuum sahifasi (progress monitoring)',
         run: async () => {
-          const rows = await this.poolManager.query<{ version_num: string }>(
-            targetId,
-            `SHOW server_version_num`,
-          );
-          const versionNum = parseInt(rows[0]?.version_num ?? '0', 10);
+          const rows = await this.poolManager.query<{
+            server_version_num: string;
+          }>(targetId, `SHOW server_version_num`);
+
+          const versionNum = parseInt(rows[0]?.server_version_num ?? '0', 10);
           if (versionNum < 130000) {
             throw new Error(
               `PostgreSQL versiyasi juda eski (${versionNum}) — 13+ tavsiya etiladi`,
