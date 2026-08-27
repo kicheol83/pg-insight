@@ -19,6 +19,7 @@ import { LiveModule } from './live/live.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { BackupModule } from './backup/backup.module';
 import { RealTimeModule } from './real-time/real-time.module';
+import { SecurityAuditModule } from './security/security-audit.model';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { RealTimeModule } from './real-time/real-time.module';
     MetricsModule,
     LiveModule,
     BackupModule,
+    SecurityAuditModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
