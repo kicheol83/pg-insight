@@ -116,6 +116,49 @@ export class IoBufferCollector extends BaseCollector<IoBufferSnapshot> {
   }
 
   private async getBgwriterStats(pool: Pool): Promise<BgwriterStats> {
+    const versionResult = await pool.query<{ version_num: string }>(
+      `SELECT current_setting('server_version_num') AS version_num`,
+    );
+    const versionNum = parseInt(versionResult.rows[0].version_num, 10);
+
+    if (versionNum >= 170000) {
+      const [bgResult, cpResult] = await Promise.all([
+        pool.query<{
+          buffers_clean: string;
+          maxwritten_clean: string;
+          buffers_alloc: string;
+          stats_reset: Date | null;
+        }>(
+          'SELECT buffers_clean, maxwritten_clean, buffers_alloc, stats_reset FROM pg_stat_bgwriter',
+        ),
+        pool.query<{
+          num_timed: string;
+          num_requested: string;
+          write_time: string;
+          sync_time: string;
+          buffers_written: string;
+        }>(
+          'SELECT num_timed, num_requested, write_time, sync_time, buffers_written FROM pg_stat_checkpointer',
+        ),
+      ]);
+      const bg = bgResult.rows[0];
+      const cp = cpResult.rows[0];
+
+      return {
+        checkpointsTimed: parseInt(cp.num_timed, 10),
+        checkpointsReq: parseInt(cp.num_requested, 10),
+        checkpointWriteTimeMs: parseFloat(cp.write_time),
+        checkpointSyncTimeMs: parseFloat(cp.sync_time),
+        buffersCheckpoint: parseInt(cp.buffers_written, 10),
+        buffersClean: parseInt(bg.buffers_clean, 10),
+        maxWrittenClean: parseInt(bg.maxwritten_clean, 10),
+        buffersBackend: 0,
+        buffersBackendFsync: 0,
+        buffersAlloc: parseInt(bg.buffers_alloc, 10),
+        statsResetTime: bg.stats_reset,
+      };
+    }
+
     const result = await pool.query<{
       checkpoints_timed: string;
       checkpoints_req: string;

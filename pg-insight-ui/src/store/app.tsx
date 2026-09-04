@@ -86,8 +86,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    const socket = io("/metrics", {
-      transports: ["websocket"],
+    const socketUrl = import.meta.env.DEV
+      ? "http://localhost:3000/metrics"
+      : "/metrics";
+
+    const socket = io(socketUrl, {
+      transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionDelay: 1000,
     });
