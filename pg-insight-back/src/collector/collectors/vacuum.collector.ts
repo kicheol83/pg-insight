@@ -108,6 +108,14 @@ export class VacuumCollector extends BaseCollector<VacuumSnapshot> {
   }
 
   private async getVacuumProgress(pool: Pool): Promise<VacuumProgress[]> {
+    const versionResult = await pool.query<{ version_num: string }>(
+      `SELECT current_setting('server_version_num') AS version_num`,
+    );
+    const versionNum = parseInt(versionResult.rows[0].version_num, 10);
+    const isPg17Plus = versionNum >= 170000;
+    const maxDeadCol = isPg17Plus ? 'max_dead_tuple_bytes' : 'max_dead_tuples';
+    const numDeadCol = isPg17Plus ? 'num_dead_item_ids' : 'num_dead_tuples';
+
     const result = await pool.query<{
       pid: number;
       relname: string;
@@ -130,8 +138,8 @@ export class VacuumCollector extends BaseCollector<VacuumSnapshot> {
         v.heap_blks_scanned,
         v.heap_blks_vacuumed,
         v.index_vacuum_count,
-        v.max_dead_tuples,
-        v.num_dead_tuples,
+        v.${maxDeadCol} AS max_dead_tuples,
+        v.${numDeadCol} AS num_dead_tuples,
         a.query
       FROM pg_stat_progress_vacuum v
       JOIN pg_class c     ON c.oid = v.relid

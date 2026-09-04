@@ -124,7 +124,7 @@ export class QueryCollector extends BaseCollector<QuerySnapshot> {
 
         -- plan_time: PostgreSQL 13+ da mavjud
         -- COALESCE — eski versiyalarda 0 qaytaradi
-        ${hasPlanTime ? 'COALESCE(plan_time, 0)' : '0'}  AS plan_time,
+        ${hasPlanTime ? 'COALESCE(total_plan_time, 0)' : '0'}  AS plan_time,
 
         rows,
         shared_blks_hit,
