@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import type { Request, Response, NextFunction } from 'express';
@@ -64,7 +65,9 @@ function protectSwaggerInProduction(
   next();
 }
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule); // { bufferLogs: true }
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
   app.setGlobalPrefix('api/v1');
 

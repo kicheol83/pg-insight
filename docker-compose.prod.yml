@@ -1,0 +1,86 @@
+name: pg-insight
+
+services:
+  platform-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pginsight
+      POSTGRES_PASSWORD: ${PLATFORM_DB_PASSWORD:?PLATFORM_DB_PASSWORD is required}
+      POSTGRES_DB: pg_insight_platform
+    volumes:
+      - platform_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pginsight -d pg_insight_platform']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  metrics-db:
+    image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pgmetrics
+      POSTGRES_PASSWORD: ${METRICS_DB_PASSWORD:?METRICS_DB_PASSWORD is required}
+      POSTGRES_DB: pg_insight_metrics
+      TS_TUNE_MEMORY: 1GB
+      TS_TUNE_NUM_CPUS: '2'
+    volumes:
+      - metrics_data:/var/lib/postgresql/data
+      - ./pg-insight-back/docker/init-platform.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pgmetrics -d pg_insight_metrics']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  api:
+    build: ./pg-insight-back
+    restart: unless-stopped
+    depends_on:
+      platform-db:
+        condition: service_healthy
+      metrics-db:
+        condition: service_healthy
+    environment:
+      PLATFORM_DATABASE_URL: postgresql://pginsight:${PLATFORM_DB_PASSWORD}@platform-db:5432/pg_insight_platform
+      TIMESCALE_URL: postgresql://pgmetrics:${METRICS_DB_PASSWORD}@metrics-db:5432/pg_insight_metrics
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      SWAGGER_USER: ${SWAGGER_USER:-}
+      SWAGGER_PASSWORD: ${SWAGGER_PASSWORD:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required}
+      BACKUP_DIR: /app/backups
+      PORT: 3000
+      NODE_ENV: production
+    volumes:
+      - backup_data:/app/backups
+    networks:
+      - internal
+
+  web:
+    build: ./pg-insight-ui
+    container_name: pg-insight-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    networks:
+      - internal
+      - proxy
+
+networks:
+  internal: {}
+  proxy:
+    external: true
+    name: proxy
+
+volumes:
+  platform_data:
+  metrics_data:
+  backup_data:

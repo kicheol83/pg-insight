@@ -13,15 +13,20 @@ import { AuditModule } from '../audit/audit.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get<string>(
-          'JWT_SECRET',
-          'change-me-jwt-secret-in-production',
-        ),
-        signOptions: {
-          expiresIn: config.get<string>('JWT_EXPIRES_IN', '15m') as any,
-        },
-      }),
+      useFactory: (config: ConfigService) => {
+        const secret = config.get<string>('JWT_SECRET');
+        if (!secret || secret.length < 32) {
+          throw new Error(
+            'JWT_SECRET must be set and at least 32 characters long',
+          );
+        }
+        return {
+          secret,
+          signOptions: {
+            expiresIn: config.get<string>('JWT_EXPIRES_IN', '15m') as any,
+          },
+        };
+      },
     }),
   ],
   controllers: [AuthController],

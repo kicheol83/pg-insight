@@ -11,11 +11,12 @@ import { PLATFORM_POOL } from './token';
     {
       provide: PLATFORM_POOL,
       useFactory: (config: ConfigService) => {
+        const connectionString = config.get<string>('TIMESCALE_URL');
+        if (!connectionString) {
+          throw new Error('TIMESCALE_URL must be set');
+        }
         return new Pool({
-          connectionString: config.get<string>(
-            'TIMESCALE_URL',
-            'postgresql://postgres:postgres@localhost:5433/pg_insight_metrics',
-          ),
+          connectionString,
           max: 10,
         });
       },
