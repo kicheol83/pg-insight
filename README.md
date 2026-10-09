@@ -1,6 +1,6 @@
 # PG Insight
 
-PostgreSQL 모니터링 대시보드입니다. 모니터링할 DB를 등록하면 커넥션, 슬로우 쿼리, 락, 블로트, VACUUM/XID, 복제 지연을 보여주고 임계값 알림을 보냅니다.
+PostgreSQL 모니터링 서비스입니다. 가입한 뒤 자신의 PostgreSQL 접속 정보를 등록하면 커넥션, 슬로우 쿼리, 락, 블로트, VACUUM/XID, 복제 지연을 대시보드에서 보고 알림을 받을 수 있습니다. 사용자는 자기가 등록한 대상만 볼 수 있습니다.
 
 데모: https://pginsight.javohir.dev
 
@@ -29,6 +29,24 @@ PostgreSQL 모니터링 대시보드입니다. 모니터링할 DB를 등록하�
 - Metrics DB: TimescaleDB hypertable, 오래된 데이터는 압축 후 삭제
 - Collectors: 대상마다 3초~5분 주기로 수집, 대상당 커넥션 최대 5개
 
+## 권한과 보안
+
+- 첫 번째 계정이 `admin`, 회원가입은 `user` (`SIGNUP_ENABLED=true`일 때만)
+- `user`는 자기 대상만 조회/수정, 다른 사람 대상은 404
+- 대상은 계정당 3개, 사설/내부 주소는 등록 불가 (SSRF 방지)
+- `EXPLAIN`은 `SELECT`/`WITH`만, `BEGIN READ ONLY` + `statement_timeout = 5s`
+- 로그인, 가입 요청 제한
+
+## 모니터링 오버헤드
+
+운영 서버의 LedgerCore DB를 대상으로 10분씩 측정했습니다.
+
+- PG Insight 쿼리: 초당 약 4회, 평균 0.145 ms
+- 실행 시간 합계: 600초 중 353 ms (CPU 1코어의 약 0.06%)
+- 대상 DB 커넥션: idle 5개
+
+측정 스크립트: `scripts/measure-overhead.sh`
+
 ## 로컬 실행
 
 ```powershell
@@ -51,9 +69,27 @@ npm run dev
 
 http://localhost:5173 에서 첫 관리자 계정을 만들 수 있습니다.
 
+## 테스트
+
+```powershell
+cd pg-insight-back
+npx jest
+cd ..\pg-insight-ui
+npx vitest run
+```
+
+Backend 182개, Frontend 41개.
+
 ## 배포
 
 ```bash
 cp .env.prod.example .env
-docker compose -f docker-compose.prod.yml up -d --build
+./scripts/deploy.sh
+./scripts/rollback.sh [sha]
 ```
+
+이미지는 커밋 SHA로 태그하고 `/api/v1/health`가 통과한 뒤에만 `.deploy-history`에 기록합니다. 마이그레이션은 되돌리지 않으므로 이전 코드와 호환되게 작성합니다.
+
+## License
+
+MIT

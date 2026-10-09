@@ -13,7 +13,15 @@ npx prisma migrate deploy
 npm run start:dev
 ```
 
-Swagger: http://localhost:3000/api/docs
+필수 환경 변수: `PLATFORM_DATABASE_URL`, `TIMESCALE_URL`, `JWT_SECRET`, `ENCRYPTION_KEY`
+
+## 모듈
+
+- `collector`: 대상별 수집기
+- `live`: 대상 DB 실시간 조회
+- `alerts`: 알림 규칙 평가
+- `targets`: 대상 등록, 커넥션 풀
+- `auth`: JWT, 권한
 
 ## 테스트
 
