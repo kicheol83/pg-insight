@@ -32,7 +32,7 @@ export function AddTargetModal({
     database: "postgres",
     username: "postgres",
     password: "",
-    sslMode: "prefer",
+    sslMode: "require",
   });
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -169,9 +169,8 @@ export function AddTargetModal({
             value={form.sslMode}
             onChange={(v) => setForm((f) => ({ ...f, sslMode: v }))}
             options={[
-              { value: "disable", label: "Disable" },
-              { value: "prefer", label: "Prefer (default)" },
-              { value: "require", label: "Require" },
+              { value: "disable", label: "Disable (no TLS)" },
+              { value: "require", label: "Require (default)" },
               { value: "verify-ca", label: "Verify CA" },
               { value: "verify-full", label: "Verify Full" },
             ]}

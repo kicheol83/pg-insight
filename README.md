@@ -36,6 +36,7 @@ PostgreSQL 모니터링 서비스입니다. 가입한 뒤 자신의 PostgreSQL �
 - 대상은 계정당 3개, 사설/내부 주소는 등록 불가 (SSRF 방지)
 - `EXPLAIN`은 `SELECT`/`WITH`만, `BEGIN READ ONLY` + `statement_timeout = 5s`
 - 로그인, 가입 요청 제한
+- 새 대상의 기본 `sslmode`는 `require` (node-postgres에는 `prefer` fallback이 없음)
 
 ## 모니터링 오버헤드
 
