@@ -63,6 +63,7 @@ services:
       - backup_data:/app/backups
     networks:
       - internal
+      - monitoring
 
   web:
     build: ./pg-insight-ui
@@ -79,6 +80,9 @@ networks:
   proxy:
     external: true
     name: proxy
+  monitoring:
+    external: true
+    name: monitoring
 
 volumes:
   platform_data:
