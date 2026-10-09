@@ -1,9 +1,14 @@
 jest.mock('../database/prisma.service', () => ({ PrismaService: class {} }));
 
 import { RequestMethod, Type } from '@nestjs/common';
-import { GUARDS_METADATA, METHOD_METADATA } from '@nestjs/common/constants';
+import {
+  GUARDS_METADATA,
+  METHOD_METADATA,
+  PATH_METADATA,
+} from '@nestjs/common/constants';
 import { AdminGuard } from './admin.guard';
 import { AuthController } from './auth.controller';
+import { TARGET_ACCESS_KEY } from './target-access.decorator';
 import { AlertsController } from '../alerts/alerts.controller';
 import { AppController } from '../app.controller';
 import { BackupController } from '../backup/backup.controller';
@@ -34,59 +39,67 @@ const MUTATING = new Set([
   RequestMethod.DELETE,
 ]);
 
-const OPEN_TO_ANY_SIGNED_IN_USER = new Set([
+const OPEN_WITHOUT_TARGET = new Set([
   'AuthController.login',
   'AuthController.refresh',
   'AuthController.logout',
   'AuthController.registerFirst',
-  'TargetsController.refresh',
-  'LiveController.explain',
 ]);
 
-const ADMIN_ONLY_READS = new Set(['BackupController.download']);
+const ADMIN_ONLY = new Set([
+  'AuthController.register',
+  'BackupController.start',
+  'BackupController.download',
+  'BackupController.remove',
+  'TargetsController.create',
+  'TargetsController.testConnection',
+]);
 
 function routes() {
-  return CONTROLLERS.flatMap((controller) =>
-    Object.getOwnPropertyNames(controller.prototype)
+  return CONTROLLERS.flatMap((controller) => {
+    const base = String(Reflect.getMetadata(PATH_METADATA, controller) ?? '');
+    return Object.getOwnPropertyNames(controller.prototype)
       .filter((name) => name !== 'constructor')
       .map((name) => {
         const handler = controller.prototype[name] as object;
         const method = Reflect.getMetadata(METHOD_METADATA, handler) as
           RequestMethod | undefined;
+        const path = `${base}/${String(Reflect.getMetadata(PATH_METADATA, handler) ?? '')}`;
         const guards = (Reflect.getMetadata(GUARDS_METADATA, handler) ??
           []) as unknown[];
         return {
           id: `${controller.name}.${name}`,
           method,
           adminOnly: guards.includes(AdminGuard),
+          ownerChecked:
+            path.includes(':targetId') ||
+            Reflect.getMetadata(TARGET_ACCESS_KEY, handler) !== undefined,
         };
       })
-      .filter((route) => route.method !== undefined),
-  );
+      .filter((route) => route.method !== undefined);
+  });
 }
 
-describe('admin-only route policy', () => {
-  it('requires the admin role for every mutating route that is not explicitly opened', () => {
-    const unguarded = routes()
-      .filter((r) => MUTATING.has(r.method!) && !r.adminOnly)
+describe('mutating route policy', () => {
+  it('protects every mutating route by target ownership or the admin role', () => {
+    const unprotected = routes()
+      .filter((r) => MUTATING.has(r.method!) && !r.adminOnly && !r.ownerChecked)
       .map((r) => r.id)
-      .filter((id) => !OPEN_TO_ANY_SIGNED_IN_USER.has(id));
+      .filter((id) => !OPEN_WITHOUT_TARGET.has(id));
 
-    expect(unguarded).toEqual([]);
+    expect(unprotected).toEqual([]);
   });
 
-  it('requires the admin role for reads that export data', () => {
-    const found = routes().filter((r) => ADMIN_ONLY_READS.has(r.id));
+  it('keeps platform-level operations admin-only', () => {
+    const found = routes().filter((r) => ADMIN_ONLY.has(r.id));
 
-    expect(found.map((r) => r.id).sort()).toEqual([...ADMIN_ONLY_READS].sort());
-    expect(found.every((r) => r.adminOnly)).toBe(true);
+    expect(found.map((r) => r.id).sort()).toEqual([...ADMIN_ONLY].sort());
+    expect(found.filter((r) => !r.adminOnly).map((r) => r.id)).toEqual([]);
   });
 
   it('keeps the explicit exceptions pointing at real routes', () => {
     const ids = new Set(routes().map((r) => r.id));
 
-    expect(
-      [...OPEN_TO_ANY_SIGNED_IN_USER].filter((id) => !ids.has(id)),
-    ).toEqual([]);
+    expect([...OPEN_WITHOUT_TARGET].filter((id) => !ids.has(id))).toEqual([]);
   });
 });

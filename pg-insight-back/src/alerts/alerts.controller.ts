@@ -9,9 +9,7 @@ import {
   Query,
   HttpCode,
   HttpStatus,
-  UseGuards,
 } from '@nestjs/common';
-import { AdminGuard } from '../auth/admin.guard';
 import { TargetAccess } from '../auth/target-access.decorator';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
 import {
@@ -81,7 +79,6 @@ export class AlertsController {
     return this.alertEngine.getRules(targetId);
   }
 
-  @UseGuards(AdminGuard)
   @Post(':targetId/rules')
   @ApiOperation({ summary: 'Create a new alert rule' })
   public async createRule(
@@ -100,7 +97,6 @@ export class AlertsController {
     });
   }
 
-  @UseGuards(AdminGuard)
   @TargetAccess('id', 'alertRule')
   @Delete('rules/:id')
   @HttpCode(HttpStatus.OK)
@@ -128,7 +124,6 @@ export class AlertsController {
     return this.alertEngine.getActiveEvents(targetId);
   }
 
-  @UseGuards(AdminGuard)
   @TargetAccess('id', 'alertEvent')
   @Patch('events/:id/ack')
   @ApiOperation({ summary: 'Acknowledge an alert event' })

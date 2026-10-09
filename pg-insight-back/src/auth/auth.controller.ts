@@ -31,8 +31,8 @@ export class RegisterDto {
   password!: string;
 
   @IsOptional()
-  @IsIn(['admin', 'viewer'])
-  role?: 'admin' | 'viewer';
+  @IsIn(['admin', 'user'])
+  role?: 'admin' | 'user';
 }
 
 export class RefreshDto {
@@ -89,7 +89,7 @@ export class AuthController {
     return this.authService.register(
       dto.email,
       dto.password,
-      dto.role ?? 'viewer',
+      dto.role ?? 'user',
       actor.id,
     );
   }

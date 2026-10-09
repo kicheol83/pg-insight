@@ -28,12 +28,12 @@ export class TargetAccessService {
   }
 
   async canAccess(actor: TargetActor, targetId: string): Promise<boolean> {
-    if (actor.role === 'admin') return true;
     const target = await this.delegate('target').findUnique({
       where: { id: targetId },
       select: { createdByUserId: true },
     });
-    return target !== null && target.createdByUserId === actor.id;
+    if (target === null) return false;
+    return actor.role === 'admin' || target.createdByUserId === actor.id;
   }
 
   private delegate(name: TargetSource): Delegate {

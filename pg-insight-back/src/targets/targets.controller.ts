@@ -199,7 +199,6 @@ export class TargetsController {
     return target;
   }
 
-  @UseGuards(AdminGuard)
   @TargetAccess('id')
   @Patch(':id')
   @ApiOperation({ summary: 'Update target configuration' })
@@ -219,7 +218,6 @@ export class TargetsController {
     return result;
   }
 
-  @UseGuards(AdminGuard)
   @TargetAccess('id')
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
@@ -249,7 +247,6 @@ export class TargetsController {
     return this.targetsService.triggerRefresh(id);
   }
 
-  @UseGuards(AdminGuard)
   @TargetAccess('id')
   @Post(':id/pause')
   @HttpCode(HttpStatus.OK)
@@ -261,7 +258,6 @@ export class TargetsController {
     return this.targetsService.pause(id);
   }
 
-  @UseGuards(AdminGuard)
   @TargetAccess('id')
   @Post(':id/resume')
   @HttpCode(HttpStatus.OK)
