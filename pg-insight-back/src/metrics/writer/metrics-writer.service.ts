@@ -79,7 +79,7 @@ export class MetricsWriterService implements OnModuleInit {
         longest_query_ms, longest_idle_in_tx_ms
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
       [
-        data.sessions[0]?.queryStart ?? new Date(),
+        new Date(),
         targetId,
         data.totalConnections,
         data.activeQueries,
