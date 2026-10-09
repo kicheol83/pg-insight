@@ -245,7 +245,7 @@ export class TargetsService {
   }
 
   async update(id: string, dto: UpdateTargetDto): Promise<TargetStatus> {
-    await this.findOne(id); // exists check
+    const before = await this.findOne(id);
 
     const updateData: Record<string, unknown> = {};
 
@@ -262,40 +262,6 @@ export class TargetsService {
         dto.password,
         this.encryptionKey,
       );
-
-      const db = this.prisma as unknown as Record<string, unknown>;
-      const current = await (
-        db['target'] as {
-          findUnique: (args: unknown) => Promise<{
-            host: string;
-            port: number;
-            database: string;
-            username: string;
-            sslMode: string;
-          } | null>;
-        }
-      ).findUnique({
-        where: { id },
-        select: {
-          host: true,
-          port: true,
-          database: true,
-          username: true,
-          sslMode: true,
-        },
-      });
-
-      if (current) {
-        this.orchestrator.stopCollection(id);
-        await this.poolManager.createPool(id, {
-          host: current.host,
-          port: current.port,
-          database: current.database,
-          user: current.username,
-          password: dto.password,
-        });
-        await this.orchestrator.startCollection(id);
-      }
     }
 
     const db = this.prisma as unknown as Record<string, unknown>;
@@ -304,6 +270,14 @@ export class TargetsService {
         update: (args: unknown) => Promise<unknown>;
       }
     ).update({ where: { id }, data: updateData });
+
+    if (dto.password || dto.sslMode) {
+      this.orchestrator.stopCollection(id);
+      await this.poolManager.reconnect(id);
+      if (before.status !== 'paused') {
+        await this.orchestrator.startCollection(id);
+      }
+    }
 
     return this.findOne(id);
   }

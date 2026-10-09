@@ -23,17 +23,22 @@ class SlowConnectingPoolManager implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 50));
     this.entries.push({ targetId: 'ledgercore', status: 'active' });
+    this.entries.push({ targetId: 'paused-by-owner', status: 'active' });
   }
 
   getAllEntries() {
     return this.entries;
+  }
+
+  async pausedTargetIds(): Promise<string[]> {
+    return ['paused-by-owner'];
   }
 }
 
 describe('CollectorOrchestrator startup', () => {
   afterEach(() => jest.restoreAllMocks());
 
-  it('starts collecting targets whose pools connect during module init', async () => {
+  it('starts collecting targets whose pools connect during module init, except paused ones', async () => {
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
     const startCollection = jest
       .spyOn(CollectorOrchestrator.prototype, 'startCollection')
@@ -65,6 +70,7 @@ describe('CollectorOrchestrator startup', () => {
     await app.init();
 
     expect(startCollection).toHaveBeenCalledWith('ledgercore');
+    expect(startCollection).not.toHaveBeenCalledWith('paused-by-owner');
     await app.close();
   });
 });

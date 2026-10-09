@@ -111,9 +111,11 @@ export class CollectorOrchestrator
   async onApplicationBootstrap(): Promise<void> {
     this.logger.log('🎬 CollectorOrchestrator starting...');
 
-    
     const entries = this.poolManager.getAllEntries();
-    const activeTargets = entries.filter((e) => e.status === 'active');
+    const paused = new Set(await this.poolManager.pausedTargetIds());
+    const activeTargets = entries.filter(
+      (e) => e.status === 'active' && !paused.has(e.targetId),
+    );
 
     this.logger.log(
       `Starting collection for ${activeTargets.length} active target(s)`,

@@ -211,8 +211,7 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
 ## 알려진 한계 및 개선 예정
 
-- 일시 정지한 대상이 API 재시작 후 다시 활성 상태로 바뀜
-- 대상 비밀번호를 변경하면 다음 재시작 전까지 SSL 설정 없이 다시 접속함
+- `sslMode=prefer`(기본값)는 TLS 없이 접속함 (node-postgres에는 TLS 실패 시 평문으로 넘어가는 동작이 없음). `require` 이상을 선택해야 암호화됨
 - UI가 대상별 WebSocket room을 아직 구독하지 않아, 대시보드는 REST 폴링으로 갱신
 - 이메일 인증, 비밀번호 재설정, 계정 삭제 미구현
 - UI 문구가 우즈베크어로 되어 있음 (한국어/영어 지원 예정)

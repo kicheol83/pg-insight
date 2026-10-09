@@ -211,8 +211,7 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
 ## Known Limitations and Roadmap
 
-- A paused target becomes active again after an API restart
-- After a target password change, the target reconnects without its SSL settings until the next restart
+- `sslMode=prefer` (the default) connects without TLS, because node-postgres has no fallback from TLS to plaintext; choose `require` or stricter for encryption
 - The UI does not subscribe to per-target WebSocket rooms yet; dashboards refresh by REST polling
 - No email verification, password reset or account deletion
 - UI text is in Uzbek (Korean and English planned)

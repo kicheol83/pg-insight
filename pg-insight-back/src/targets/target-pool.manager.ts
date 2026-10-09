@@ -93,6 +93,14 @@ export class TargetPoolManager implements OnModuleInit, OnModuleDestroy {
     return this.connectStored(target);
   }
 
+  async pausedTargetIds(): Promise<string[]> {
+    const rows = await this.targetDelegate().findMany({
+      where: { isActive: true, status: 'paused' },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
   private async connectStored(target: StoredTarget): Promise<TargetPoolEntry> {
     const password = decrypt(target.passwordEncrypted, getEncryptionKey());
     return this.createPool(target.id, {
@@ -360,18 +368,21 @@ export class TargetPoolManager implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     try {
       const db = this.prisma as unknown as Record<string, unknown>;
-      await (
-        db['target'] as {
-          update: (args: unknown) => Promise<unknown>;
-        }
-      ).update({
+      const target = db['target'] as {
+        update: (args: unknown) => Promise<unknown>;
+        updateMany: (args: unknown) => Promise<unknown>;
+      };
+      await target.update({
         where: { id: targetId },
         data: {
-          status,
           errorMessage: errorMessage ?? null,
           lastConnectedAt: status === 'active' ? new Date() : undefined,
           ...extra,
         },
+      });
+      await target.updateMany({
+        where: { id: targetId, status: { not: 'paused' } },
+        data: { status },
       });
     } catch (error) {
       this.logger.error(

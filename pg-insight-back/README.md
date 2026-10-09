@@ -169,8 +169,7 @@ Every query in `live-query.service.ts` and the collectors runs against a databas
 
 ## Known limitations
 
-- A paused target becomes active again after an API restart.
-- Changing a target's password recreates its pool without the SSL settings until the next restart.
+- `sslMode=prefer` (the default) maps to no TLS in node-postgres; use `require` or stricter for encryption.
 - No email verification, password reset or account deletion.
 - The encryption key rotation script has not been updated for the Prisma 7 driver adapter.
 - ESLint configuration needs cleanup; no E2E tests.
