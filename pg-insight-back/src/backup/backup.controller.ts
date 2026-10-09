@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AdminGuard } from '../auth/admin.guard';
+import { TargetAccess } from '../auth/target-access.decorator';
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { BackupService } from './backup.service';
@@ -46,6 +47,7 @@ export class BackupController {
   }
 
   @UseGuards(AdminGuard)
+  @TargetAccess('backupId', 'backup')
   @Get(':backupId/download')
   @ApiOperation({ summary: 'Download a completed backup file' })
   async download(
@@ -72,6 +74,7 @@ export class BackupController {
   }
 
   @UseGuards(AdminGuard)
+  @TargetAccess('backupId', 'backup')
   @Delete(':backupId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete a backup file and its record' })

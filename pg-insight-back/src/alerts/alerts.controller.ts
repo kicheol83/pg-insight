@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AdminGuard } from '../auth/admin.guard';
+import { TargetAccess } from '../auth/target-access.decorator';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
 import {
   IsString,
@@ -100,6 +101,7 @@ export class AlertsController {
   }
 
   @UseGuards(AdminGuard)
+  @TargetAccess('id', 'alertRule')
   @Delete('rules/:id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete an alert rule' })
@@ -127,6 +129,7 @@ export class AlertsController {
   }
 
   @UseGuards(AdminGuard)
+  @TargetAccess('id', 'alertEvent')
   @Patch('events/:id/ack')
   @ApiOperation({ summary: 'Acknowledge an alert event' })
   public async acknowledge(@Param('id') id: string) {

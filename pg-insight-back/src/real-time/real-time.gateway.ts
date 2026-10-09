@@ -12,6 +12,7 @@ import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Namespace, Socket } from 'socket.io';
 import type { AlertTriggerResult } from '../alerts/alert-engine.service';
+import { TargetAccessService } from '../auth/target-access.service';
 
 @WebSocketGateway({
   namespace: '/metrics',
@@ -33,7 +34,10 @@ export class RealtimeGateway
 
   private readonly clientSubscriptions = new Map<string, Set<string>>();
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly targetAccess: TargetAccessService,
+  ) {}
 
   afterInit(server: Namespace): void {
     server.use((socket, next) => {
@@ -76,13 +80,20 @@ export class RealtimeGateway
   }
 
   @SubscribeMessage('subscribe')
-  handleSubscribe(
+  async handleSubscribe(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { targetId: string },
-  ): { success: boolean; targetId: string } {
-    const { targetId } = data;
+  ): Promise<{ success: boolean; targetId: string }> {
+    const targetId = data?.targetId;
 
-    if (!targetId) return { success: false, targetId: '' };
+    if (typeof targetId !== 'string' || !targetId) {
+      return { success: false, targetId: '' };
+    }
+
+    const actor = client.data.user as { id: string; role: string } | undefined;
+    if (!actor || !(await this.targetAccess.canAccess(actor, targetId))) {
+      return { success: false, targetId };
+    }
 
     const roomName = `target:${targetId}`;
     void client.join(roomName);
@@ -221,12 +232,6 @@ export class RealtimeGateway
       targetId,
       status,
       message,
-      timestamp: new Date(),
-    });
-
-    this.server.emit('target:status', {
-      targetId,
-      status,
       timestamp: new Date(),
     });
   }
