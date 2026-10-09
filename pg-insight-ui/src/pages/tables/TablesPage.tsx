@@ -30,8 +30,15 @@ import { useQuery } from "@/hooks/useQuery";
 import { useActiveTarget } from "@/store/app";
 import { liveApi, maintenanceApi } from "@/api/endpoints";
 import { fmtBytes, fmtNum, fmtRelative, cn } from "@/lib/format";
+import { useI18n, type MessageKey } from "@/i18n";
 import { severityBadge } from "@/lib/colors";
 import type { TableStat, IndexStat, TableRecommendation } from "@/types/model";
+
+const SEVERITY_LABELS: Record<TableRecommendation["severity"], MessageKey> = {
+  critical: "tables.severity.critical",
+  warning: "tables.severity.warning",
+  info: "tables.severity.info",
+};
 
 function BloatBar({ ratio }: { ratio: number }) {
   const pct = Math.min(ratio * 100, 100);
@@ -69,6 +76,7 @@ export default function TablesPage() {
     index: number;
   } | null>(null);
   const toast = useToast();
+  const { t, locale } = useI18n();
 
   const { data, loading, refetch } = useQuery(
     () => liveApi.tableStats(activeTargetId ?? ""),
@@ -76,9 +84,9 @@ export default function TablesPage() {
   );
 
   const tables = (data?.tables ?? []).filter(
-    (t) =>
+    (tbl) =>
       !search ||
-      `${t.schemaName}.${t.tableName}`
+      `${tbl.schemaName}.${tbl.tableName}`
         .toLowerCase()
         .includes(search.toLowerCase()),
   );
@@ -101,13 +109,13 @@ export default function TablesPage() {
       await maintenanceApi.vacuumTable(activeTargetId, schema, table);
       toast({
         type: "success",
-        title: "VACUUM boshlandi",
-        message: `${rec.targetName} — natijani kuzatish uchun Vacuum sahifasiga o'ting`,
+        title: t("tables.vacuumStarted"),
+        message: t("tables.vacuumStartedMessage", { name: rec.targetName }),
       });
     } catch (err) {
       toast({
         type: "error",
-        title: "VACUUM boshlanmadi",
+        title: t("tables.vacuumFailed"),
         message: (err as Error).message,
       });
     } finally {
@@ -125,7 +133,7 @@ export default function TablesPage() {
       await maintenanceApi.dropUnusedIndex(activeTargetId, schema, index);
       toast({
         type: "success",
-        title: "Indeks o'chirilmoqda",
+        title: t("tables.indexDropping"),
         message: confirmDrop.rec.targetName,
       });
       setConfirmDrop(null);
@@ -133,7 +141,7 @@ export default function TablesPage() {
     } catch (err) {
       toast({
         type: "error",
-        title: "O'chirib bo'lmadi",
+        title: t("tables.dropFailed"),
         message: (err as Error).message,
       });
     } finally {
@@ -144,8 +152,8 @@ export default function TablesPage() {
   return (
     <>
       <TopBar
-        title="Tables & Indexes"
-        subtitle="Bloat, scans, and index health"
+        title={t("nav.tables")}
+        subtitle={t("tables.subtitle")}
         actions={
           <Button
             size="sm"
@@ -154,7 +162,7 @@ export default function TablesPage() {
             onClick={refetch}
             loading={loading}
           >
-            Refresh
+            {t("common.refresh")}
           </Button>
         }
       />
@@ -169,7 +177,7 @@ export default function TablesPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search tables & indexes…"
+              placeholder={t("tables.searchPlaceholder")}
               className="input pl-8 w-56 text-xs"
             />
           </div>
@@ -178,7 +186,7 @@ export default function TablesPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
           <Card padding="sm">
             <StatBox
-              label="Table size"
+              label={t("tables.tableSize")}
               value={fmtBytes(data?.totalTableSizeBytes ?? 0)}
               icon={<HardDrive size={13} />}
               loading={loading && !data}
@@ -186,7 +194,7 @@ export default function TablesPage() {
           </Card>
           <Card padding="sm">
             <StatBox
-              label="Index size"
+              label={t("tables.indexSize")}
               value={fmtBytes(data?.totalIndexSizeBytes ?? 0)}
               icon={<HardDrive size={13} />}
               loading={loading && !data}
@@ -194,7 +202,7 @@ export default function TablesPage() {
           </Card>
           <Card padding="sm">
             <StatBox
-              label="Need vacuum"
+              label={t("tables.needVacuum")}
               value={data?.tablesNeedingVacuum ?? "—"}
               icon={
                 <Trash2
@@ -207,11 +215,13 @@ export default function TablesPage() {
           </Card>
           <Card padding="sm">
             <StatBox
-              label="Unused indexes"
+              label={t("tables.unusedIndexes")}
               value={data?.unusedIndexCount ?? "—"}
               sub={
                 data?.unusedIndexSizeBytes
-                  ? `${fmtBytes(data.unusedIndexSizeBytes)} wasted`
+                  ? t("tables.wasted", {
+                      size: fmtBytes(data.unusedIndexSizeBytes),
+                    })
                   : undefined
               }
               icon={
@@ -228,8 +238,8 @@ export default function TablesPage() {
         {(data?.recommendations?.length ?? 0) > 0 && (
           <Card className="mb-5">
             <CardHeader
-              title="Recommendations"
-              subtitle="Actionable improvements — copy the command to apply"
+              title={t("tables.recommendations")}
+              subtitle={t("tables.recommendationsSubtitle")}
               icon={<AlertTriangle size={15} className="text-yellow-400" />}
             />
             <div className="space-y-2">
@@ -244,7 +254,9 @@ export default function TablesPage() {
                       severityBadge(rec.severity),
                     )}
                   >
-                    {rec.severity}
+                    {SEVERITY_LABELS[rec.severity]
+                      ? t(SEVERITY_LABELS[rec.severity])
+                      : rec.severity}
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="text-xs text-primary mb-1">
@@ -266,7 +278,7 @@ export default function TablesPage() {
                       onClick={() => handleRunVacuum(rec, i)}
                       className="shrink-0"
                     >
-                      Ishga tushirish
+                      {t("tables.run")}
                     </Button>
                   )}
                   {rec.type === "unused_index" && (
@@ -278,7 +290,7 @@ export default function TablesPage() {
                       onClick={() => setConfirmDrop({ rec, index: i })}
                       className="shrink-0"
                     >
-                      O'chirish
+                      {t("common.delete")}
                     </Button>
                   )}
                 </div>
@@ -290,11 +302,11 @@ export default function TablesPage() {
         <Modal
           open={!!confirmDrop}
           onClose={() => setConfirmDrop(null)}
-          title="Indeksni o'chirishni tasdiqlang"
+          title={t("tables.confirmDropTitle")}
           footer={
             <>
               <Button variant="ghost" onClick={() => setConfirmDrop(null)}>
-                Bekor qilish
+                {t("common.cancel")}
               </Button>
               <Button
                 variant="danger"
@@ -302,7 +314,7 @@ export default function TablesPage() {
                 onClick={handleConfirmDropIndex}
                 loading={runningRec !== null}
               >
-                Ha, o'chirish
+                {t("tables.confirmDropYes")}
               </Button>
             </>
           }
@@ -313,13 +325,10 @@ export default function TablesPage() {
                 <code className="mono text-brand-500">
                   {confirmDrop.rec.targetName}
                 </code>{" "}
-                indeksi o'chiriladi. Backend bu amalni bajarishdan oldin indeks
-                hali ham ishlatilmayotganini va constraint'ga (primary
-                key/unique) tegishli emasligini qayta tekshiradi.
+                {t("tables.confirmDropBody")}
               </p>
               <div className="text-xs text-yellow-500 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-500/10 rounded-lg px-3 py-2">
-                Bu amalni qaytarib bo'lmaydi — indeksni qayta yaratish uchun uni
-                noldan yaratishga to'g'ri keladi.
+                {t("tables.confirmDropWarning")}
               </div>
             </div>
           )}
@@ -328,10 +337,10 @@ export default function TablesPage() {
         <Tabs defaultValue="tables">
           <TabList>
             <Tab value="tables" icon={<Table2 size={13} />}>
-              Tables ({tables.length})
+              {t("tables.tabTables", { count: tables.length })}
             </Tab>
             <Tab value="indexes" icon={<HardDrive size={13} />}>
-              Indexes ({indexes.length})
+              {t("tables.tabIndexes", { count: indexes.length })}
             </Tab>
           </TabList>
 
@@ -340,34 +349,34 @@ export default function TablesPage() {
               <DataTable<TableStat>
                 loading={loading && !data}
                 data={tables}
-                keyFn={(t) => `${t.schemaName}.${t.tableName}`}
-                emptyMsg="No tables found"
-                rowClassName={(t) =>
-                  t.needsVacuum ? "bg-yellow-50/50 dark:bg-yellow-500/5" : ""
+                keyFn={(tbl) => `${tbl.schemaName}.${tbl.tableName}`}
+                emptyMsg={t("tables.noTables")}
+                rowClassName={(tbl) =>
+                  tbl.needsVacuum ? "bg-yellow-50/50 dark:bg-yellow-500/5" : ""
                 }
                 columns={[
                   {
                     key: "name",
-                    header: "Table",
-                    render: (t) => (
+                    header: t("tables.colTable"),
+                    render: (tbl) => (
                       <div>
                         <span className="mono text-xs text-primary">
-                          {t.schemaName}.{t.tableName}
+                          {tbl.schemaName}.{tbl.tableName}
                         </span>
                         <div className="flex gap-1 mt-0.5">
-                          {t.needsVacuum && (
+                          {tbl.needsVacuum && (
                             <Badge variant="warning" size="xs">
-                              needs vacuum
+                              {t("tables.badgeNeedsVacuum")}
                             </Badge>
                           )}
-                          {t.needsIndex && (
+                          {tbl.needsIndex && (
                             <Badge variant="orange" size="xs">
-                              seq-scan heavy
+                              {t("tables.badgeSeqScanHeavy")}
                             </Badge>
                           )}
-                          {t.hasVacuumDisabled && (
+                          {tbl.hasVacuumDisabled && (
                             <Badge variant="error" size="xs">
-                              autovacuum off
+                              {t("tables.badgeAutovacuumOff")}
                             </Badge>
                           )}
                         </div>
@@ -376,83 +385,83 @@ export default function TablesPage() {
                   },
                   {
                     key: "live",
-                    header: "Live rows",
+                    header: t("tables.colLiveRows"),
                     width: "90px",
                     align: "right",
-                    render: (t) => (
+                    render: (tbl) => (
                       <span className="text-xs text-primary">
-                        {fmtNum(t.liveTuples)}
+                        {fmtNum(tbl.liveTuples)}
                       </span>
                     ),
                   },
                   {
                     key: "dead",
-                    header: "Dead rows",
+                    header: t("tables.colDeadRows"),
                     width: "90px",
                     align: "right",
-                    render: (t) => (
+                    render: (tbl) => (
                       <span
                         className={cn(
                           "text-xs",
-                          t.deadTuples > t.liveTuples * 0.2
+                          tbl.deadTuples > tbl.liveTuples * 0.2
                             ? "text-red-400 font-bold"
                             : "text-secondary",
                         )}
                       >
-                        {fmtNum(t.deadTuples)}
+                        {fmtNum(tbl.deadTuples)}
                       </span>
                     ),
                   },
                   {
                     key: "bloat",
-                    header: "Bloat",
+                    header: t("tables.colBloat"),
                     width: "140px",
-                    render: (t) => <BloatBar ratio={t.bloatRatio} />,
+                    render: (tbl) => <BloatBar ratio={tbl.bloatRatio} />,
                   },
                   {
                     key: "scans",
-                    header: "Seq / Idx scans",
+                    header: t("tables.colSeqIdxScans"),
                     width: "130px",
                     align: "right",
-                    render: (t) => (
+                    render: (tbl) => (
                       <div className="text-xs">
                         <span
                           className={cn(
-                            t.seqScanRatio > 0.5 && t.seqScans > 100
+                            tbl.seqScanRatio > 0.5 && tbl.seqScans > 100
                               ? "text-orange-400 font-bold"
                               : "text-secondary",
                           )}
                         >
-                          {fmtNum(t.seqScans)}
+                          {fmtNum(tbl.seqScans)}
                         </span>
                         <span className="text-muted"> / </span>
                         <span className="text-secondary">
-                          {fmtNum(t.idxScans)}
+                          {fmtNum(tbl.idxScans)}
                         </span>
                       </div>
                     ),
                   },
                   {
                     key: "size",
-                    header: "Total size",
+                    header: t("tables.colTotalSize"),
                     width: "90px",
                     align: "right",
-                    render: (t) => (
+                    render: (tbl) => (
                       <span className="text-xs text-primary font-medium">
-                        {fmtBytes(t.totalSizeBytes)}
+                        {fmtBytes(tbl.totalSizeBytes)}
                       </span>
                     ),
                   },
                   {
                     key: "vacuum",
-                    header: "Last vacuum",
+                    header: t("tables.colLastVacuum"),
                     width: "110px",
                     align: "right",
-                    render: (t) => {
-                      const last = t.lastAutovacuum ?? t.lastVacuum;
+                    render: (tbl) => {
+                      const last = tbl.lastAutovacuum ?? tbl.lastVacuum;
                       return (
                         <span className="text-[11px] text-muted">
-                          {last ? fmtRelative(last) : "never"}
+                          {last ? fmtRelative(last, locale) : t("tables.never")}
                         </span>
                       );
                     },
@@ -468,28 +477,30 @@ export default function TablesPage() {
                 loading={loading && !data}
                 data={indexes}
                 keyFn={(i) => `${i.schemaName}.${i.indexName}`}
-                emptyMsg="No indexes found"
+                emptyMsg={t("tables.noIndexes")}
                 rowClassName={(i) =>
                   i.isUnused ? "bg-orange-50/50 dark:bg-orange-500/5" : ""
                 }
                 columns={[
                   {
                     key: "name",
-                    header: "Index",
+                    header: t("tables.colIndex"),
                     render: (i) => (
                       <div>
                         <span className="mono text-xs text-primary">
                           {i.indexName}
                         </span>
                         <div className="text-[10px] text-muted">
-                          on {i.schemaName}.{i.tableName}
+                          {t("tables.onTable", {
+                            name: `${i.schemaName}.${i.tableName}`,
+                          })}
                         </div>
                       </div>
                     ),
                   },
                   {
                     key: "flags",
-                    header: "Type",
+                    header: t("tables.colType"),
                     width: "130px",
                     render: (i) => (
                       <div className="flex gap-1 flex-wrap">
@@ -505,7 +516,7 @@ export default function TablesPage() {
                         )}
                         {i.isUnused && (
                           <Badge variant="orange" size="xs">
-                            unused
+                            {t("tables.badgeUnused")}
                           </Badge>
                         )}
                       </div>
@@ -513,7 +524,7 @@ export default function TablesPage() {
                   },
                   {
                     key: "scans",
-                    header: "Scans",
+                    header: t("tables.colScans"),
                     width: "90px",
                     align: "right",
                     render: (i) => (
@@ -529,7 +540,7 @@ export default function TablesPage() {
                   },
                   {
                     key: "size",
-                    header: "Size",
+                    header: t("tables.colSize"),
                     width: "90px",
                     align: "right",
                     render: (i) => (
@@ -540,7 +551,7 @@ export default function TablesPage() {
                   },
                   {
                     key: "cols",
-                    header: "Columns",
+                    header: t("tables.colColumns"),
                     render: (i) => (
                       <span className="mono text-[11px] text-secondary">
                         {i.columns.join(", ")}

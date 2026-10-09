@@ -1,0 +1,80 @@
+import type { Dictionary } from "../locales";
+
+export const layout = {
+  "nav.dashboard": { ko: "대시보드", en: "Dashboard", uz: "Boshqaruv paneli" },
+  "nav.targets": { ko: "모니터링 대상", en: "Targets", uz: "Targetlar" },
+  "nav.backups": { ko: "백업", en: "Backups", uz: "Backup'lar" },
+  "nav.database": {
+    ko: "데이터베이스",
+    en: "Database",
+    uz: "Ma'lumotlar bazasi",
+  },
+  "nav.connections": { ko: "커넥션", en: "Connections", uz: "Ulanishlar" },
+  "nav.queries": { ko: "쿼리", en: "Queries", uz: "So'rovlar" },
+  "nav.locks": { ko: "락", en: "Locks", uz: "Qulflar" },
+  "nav.tables": {
+    ko: "테이블 & 인덱스",
+    en: "Tables & Indexes",
+    uz: "Jadvallar va indekslar",
+  },
+  "nav.io": { ko: "I/O", en: "I/O", uz: "I/O" },
+  "nav.vacuum": { ko: "VACUUM", en: "Vacuum", uz: "Vacuum" },
+  "nav.jobProgress": {
+    ko: "작업 진행률",
+    en: "Job Progress",
+    uz: "Jarayonlar holati",
+  },
+  "nav.replication": { ko: "복제", en: "Replication", uz: "Replikatsiya" },
+  "nav.alerts": { ko: "알림", en: "Alerts", uz: "Ogohlantirishlar" },
+  "nav.settings": { ko: "설정", en: "Settings", uz: "Sozlamalar" },
+  "nav.diagnostics": { ko: "진단", en: "Diagnostics", uz: "Diagnostika" },
+  "layout.tagline": {
+    ko: "PostgreSQL 모니터링",
+    en: "PostgreSQL Monitor",
+    uz: "PostgreSQL monitoringi",
+  },
+  "layout.live": { ko: "실시간", en: "Live", uz: "Jonli" },
+  "layout.offline": { ko: "오프라인", en: "Offline", uz: "Oflayn" },
+  "layout.connecting": { ko: "연결 중…", en: "Connecting…", uz: "Ulanmoqda…" },
+  "layout.logout": { ko: "로그아웃", en: "Log out", uz: "Chiqish" },
+  "layout.collapse": {
+    ko: "사이드바 접기",
+    en: "Collapse sidebar",
+    uz: "Yon panelni yig'ish",
+  },
+  "layout.expand": {
+    ko: "사이드바 펼치기",
+    en: "Expand sidebar",
+    uz: "Yon panelni ochish",
+  },
+  "theme.light": { ko: "라이트", en: "Light", uz: "Yorug'" },
+  "theme.dark": { ko: "다크", en: "Dark", uz: "Qorong'i" },
+  "theme.system": { ko: "시스템", en: "System", uz: "Tizim" },
+  "ui.error": { ko: "오류", en: "Error", uz: "Xatolik" },
+  "ui.tryAgain": { ko: "다시 시도", en: "Try again", uz: "Qayta urinish" },
+  "ui.copyToClipboard": {
+    ko: "클립보드에 복사",
+    en: "Copy to clipboard",
+    uz: "Buferga nusxalash",
+  },
+  "ui.emptyMessage": {
+    ko: "데이터가 수집되면 여기에 표시됩니다",
+    en: "Data will appear here when available",
+    uz: "Ma'lumot paydo bo'lganda shu yerda ko'rinadi",
+  },
+  "target.select": {
+    ko: "모니터링 대상 선택…",
+    en: "Select a target…",
+    uz: "Target tanlang…",
+  },
+  "target.none": {
+    ko: "등록된 대상이 없습니다",
+    en: "No targets added yet",
+    uz: "Hali target qo'shilmagan",
+  },
+  "target.add": {
+    ko: "PostgreSQL 대상 추가",
+    en: "Add PostgreSQL target",
+    uz: "PostgreSQL target qo'shish",
+  },
+} satisfies Dictionary;

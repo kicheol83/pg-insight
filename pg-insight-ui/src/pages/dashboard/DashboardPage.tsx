@@ -59,9 +59,11 @@ import {
   xidAgeColor,
   lagColor,
 } from "@/lib/colors";
+import { useI18n } from "@/i18n";
 
 export default function DashboardPage() {
   const { activeTargetId } = useActiveTarget();
+  const { t, locale } = useI18n();
   const [timeRange, setTimeRange] = useState<1 | 6 | 24>(1);
 
   const {
@@ -102,7 +104,7 @@ export default function DashboardPage() {
   if (!activeTargetId) {
     return (
       <>
-        <TopBar title="Dashboard" subtitle="Real-time PostgreSQL overview" />
+        <TopBar title={t("nav.dashboard")} subtitle={t("dashboard.subtitle")} />
         <PageContent>
           <div className="flex items-center gap-3 mb-5">
             <TargetSelector />
@@ -113,11 +115,10 @@ export default function DashboardPage() {
             </div>
             <div className="text-center">
               <h2 className="text-lg font-semibold text-primary mb-2">
-                No target selected
+                {t("dashboard.noTarget")}
               </h2>
               <p className="text-sm text-muted max-w-sm">
-                Add a PostgreSQL target to start monitoring your database in
-                real-time.
+                {t("dashboard.noTargetHint")}
               </p>
             </div>
           </div>
@@ -131,9 +132,11 @@ export default function DashboardPage() {
   return (
     <>
       <TopBar
-        title="Dashboard"
+        title={t("nav.dashboard")}
         subtitle={
-          updatedAt ? `Updated ${fmtRelative(updatedAt)}` : "Connecting…"
+          updatedAt
+            ? t("dashboard.updated", { time: fmtRelative(updatedAt, locale) })
+            : t("layout.connecting")
         }
         actions={
           <Button
@@ -143,7 +146,7 @@ export default function DashboardPage() {
             onClick={refetch}
             loading={loading}
           >
-            Refresh
+            {t("common.refresh")}
           </Button>
         }
       />
@@ -177,7 +180,7 @@ export default function DashboardPage() {
               <LiveDot size="xs" />
             </div>
             <StatBox
-              label="Connections"
+              label={t("nav.connections")}
               value={
                 loading ? (
                   <Skeleton className="h-8 w-16 rounded" />
@@ -198,13 +201,13 @@ export default function DashboardPage() {
             />
             <div className="flex gap-2 mt-2">
               <span className="text-xs text-muted">
-                Active:{" "}
+                {t("dashboard.active")}:{" "}
                 <span className="text-green-400 font-medium">
                   {conn?.active ?? 0}
                 </span>
               </span>
               <span className="text-xs text-muted">
-                Idle:{" "}
+                {t("dashboard.idle")}:{" "}
                 <span className="text-secondary font-medium">
                   {conn?.idle ?? 0}
                 </span>
@@ -223,7 +226,7 @@ export default function DashboardPage() {
             )}
           >
             <StatBox
-              label="Pool usage"
+              label={t("dashboard.poolUsage")}
               value={
                 loading ? (
                   <Skeleton className="h-8 w-16 rounded" />
@@ -235,15 +238,15 @@ export default function DashboardPage() {
               sub={
                 <span className={utilizationColor(conn?.utilizationPct ?? 0)}>
                   {(conn?.utilizationPct ?? 0) >= 90
-                    ? "Critical"
+                    ? t("dashboard.critical")
                     : (conn?.utilizationPct ?? 0) >= 75
-                      ? "High"
-                      : "Normal"}
+                      ? t("dashboard.high")
+                      : t("dashboard.normal")}
                 </span>
               }
             />
             <div className="text-xs text-muted mt-2">
-              Max: {conn?.maxConnections ?? "—"}
+              {t("dashboard.max")}: {conn?.maxConnections ?? "—"}
             </div>
           </Card>
 
@@ -254,12 +257,14 @@ export default function DashboardPage() {
               </div>
               {(summary?.slowQueriesCount ?? 0) > 0 && (
                 <Badge variant="warning" size="xs" dot>
-                  {summary?.slowQueriesCount} slow
+                  {t("dashboard.slowCount", {
+                    count: summary?.slowQueriesCount ?? 0,
+                  })}
                 </Badge>
               )}
             </div>
             <StatBox
-              label="Slow queries (1h)"
+              label={t("dashboard.slowQueries")}
               value={
                 loading ? (
                   <Skeleton className="h-8 w-12 rounded" />
@@ -269,7 +274,7 @@ export default function DashboardPage() {
               }
             />
             <div className="text-xs text-muted mt-2">
-              Cache hit:{" "}
+              {t("dashboard.cacheHit")}:{" "}
               <span
                 className={
                   summary?.avgCacheHitRatio && summary.avgCacheHitRatio < 0.9
@@ -291,12 +296,14 @@ export default function DashboardPage() {
               </div>
               {(summary?.lockWaitsCount ?? 0) > 0 && (
                 <Badge variant="error" size="xs" dot>
-                  {summary?.lockWaitsCount} waiting
+                  {t("dashboard.waitingCount", {
+                    count: summary?.lockWaitsCount ?? 0,
+                  })}
                 </Badge>
               )}
             </div>
             <StatBox
-              label="Lock waits (1h)"
+              label={t("dashboard.lockWaits")}
               value={
                 loading ? (
                   <Skeleton className="h-8 w-12 rounded" />
@@ -306,7 +313,7 @@ export default function DashboardPage() {
               }
             />
             <div className="text-xs text-muted mt-2">
-              Deadlocks:{" "}
+              {t("dashboard.deadlocks")}:{" "}
               <span className="text-secondary">
                 {summary?.deadlocksTotal ?? 0}
               </span>
@@ -321,7 +328,9 @@ export default function DashboardPage() {
               <Clock size={15} className="text-purple-400" />
             </div>
             <div className="min-w-0">
-              <div className="text-xs text-muted mb-0.5">XID Age</div>
+              <div className="text-xs text-muted mb-0.5">
+                {t("dashboard.xidAge")}
+              </div>
               <div
                 className={cn(
                   "text-sm font-bold",
@@ -332,7 +341,7 @@ export default function DashboardPage() {
               </div>
               {summary?.hasXidRisk && (
                 <Badge variant="error" size="xs" className="mt-1">
-                  Risk
+                  {t("dashboard.risk")}
                 </Badge>
               )}
             </div>
@@ -342,7 +351,9 @@ export default function DashboardPage() {
               <GitBranch size={15} className="text-teal-400" />
             </div>
             <div className="min-w-0">
-              <div className="text-xs text-muted mb-0.5">Replication lag</div>
+              <div className="text-xs text-muted mb-0.5">
+                {t("dashboard.replicationLag")}
+              </div>
               <div
                 className={cn(
                   "text-sm font-bold",
@@ -352,7 +363,7 @@ export default function DashboardPage() {
                 {loading
                   ? "—"
                   : summary?.replicationLagMb === null
-                    ? "Not replicating"
+                    ? t("dashboard.notReplicating")
                     : `${summary?.replicationLagMb ?? 0} MB`}
               </div>
             </div>
@@ -362,7 +373,9 @@ export default function DashboardPage() {
               <Trash2 size={15} className="text-orange-400" />
             </div>
             <div className="min-w-0">
-              <div className="text-xs text-muted mb-0.5">Active vacuums</div>
+              <div className="text-xs text-muted mb-0.5">
+                {t("dashboard.activeVacuums")}
+              </div>
               <div className="text-sm font-bold text-primary">
                 {loading ? "—" : (summary?.activeVacuums ?? 0)}
               </div>
@@ -373,7 +386,9 @@ export default function DashboardPage() {
               <TrendingUp size={15} className="text-blue-400" />
             </div>
             <div className="min-w-0">
-              <div className="text-xs text-muted mb-0.5">Longest query</div>
+              <div className="text-xs text-muted mb-0.5">
+                {t("dashboard.longestQuery")}
+              </div>
               <div className="text-sm font-bold text-primary">
                 {loading ? "—" : fmtMs(conn?.longestQueryMs ?? 0)}
               </div>
@@ -385,8 +400,8 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
           <Card>
             <CardHeader
-              title="Connection trend"
-              subtitle={`Last ${timeRange}h`}
+              title={t("dashboard.connectionTrend")}
+              subtitle={t("dashboard.lastHours", { hours: timeRange })}
               icon={<Wifi size={15} />}
             />
             <ResponsiveContainer width="100%" height={200}>
@@ -409,7 +424,7 @@ export default function DashboardPage() {
                 <Area
                   type="monotone"
                   dataKey="total"
-                  name="Total"
+                  name={t("dashboard.total")}
                   stroke="#0ea5e9"
                   fill="url(#gTotal)"
                   strokeWidth={1.5}
@@ -418,7 +433,7 @@ export default function DashboardPage() {
                 <Area
                   type="monotone"
                   dataKey="active"
-                  name="Active"
+                  name={t("dashboard.active")}
                   stroke="#22c55e"
                   fill="none"
                   strokeWidth={1.5}
@@ -427,7 +442,7 @@ export default function DashboardPage() {
                 <Area
                   type="monotone"
                   dataKey="idleInTx"
-                  name="Idle in tx"
+                  name={t("dashboard.idleInTx")}
                   stroke="#ef4444"
                   fill="none"
                   strokeWidth={1.5}
@@ -440,8 +455,10 @@ export default function DashboardPage() {
 
           <Card>
             <CardHeader
-              title="Lock wait events"
-              subtitle={`Last ${Math.min(timeRange, 6)}h`}
+              title={t("dashboard.lockWaitEvents")}
+              subtitle={t("dashboard.lastHours", {
+                hours: Math.min(timeRange, 6),
+              })}
               icon={<Lock size={15} />}
             />
             <ResponsiveContainer width="100%" height={200}>
@@ -456,7 +473,7 @@ export default function DashboardPage() {
                 <Tooltip />
                 <Bar
                   dataKey="waitingLocks"
-                  name="Waiting"
+                  name={t("dashboard.waiting")}
                   fill="#ef4444"
                   radius={[2, 2, 0, 0]}
                 />
@@ -466,8 +483,8 @@ export default function DashboardPage() {
 
           <Card>
             <CardHeader
-              title="Buffer cache hit ratio"
-              subtitle="Target: > 99%"
+              title={t("dashboard.bufferCacheHit")}
+              subtitle={t("dashboard.cacheHitGoal")}
               icon={<HardDrive size={15} />}
             />
             <ResponsiveContainer width="100%" height={200}>
@@ -487,7 +504,7 @@ export default function DashboardPage() {
                 <Line
                   type="monotone"
                   dataKey="value"
-                  name="Cache hit"
+                  name={t("dashboard.cacheHit")}
                   stroke="#22c55e"
                   strokeWidth={2}
                   dot={false}
@@ -498,14 +515,14 @@ export default function DashboardPage() {
 
           <Card>
             <CardHeader
-              title="Connections by application"
-              subtitle="Current snapshot"
+              title={t("dashboard.connectionsByApp")}
+              subtitle={t("dashboard.currentSnapshot")}
               icon={<Database size={15} />}
             />
             {!connByApp?.length ? (
               <EmptyState
-                title="No data"
-                message="Connection data will appear here"
+                title={t("common.noData")}
+                message={t("dashboard.connectionDataEmpty")}
               />
             ) : (
               <div className="space-y-2 mt-2">
@@ -548,8 +565,8 @@ export default function DashboardPage() {
         )?.length ?? 0) > 0 && (
           <Card>
             <CardHeader
-              title="Tables with highest bloat"
-              subtitle="Dead tuples ratio — run VACUUM to reclaim space"
+              title={t("dashboard.bloatTitle")}
+              subtitle={t("dashboard.bloatSubtitle")}
               icon={<AlertTriangle size={15} className="text-yellow-400" />}
             />
             <div className="space-y-2">

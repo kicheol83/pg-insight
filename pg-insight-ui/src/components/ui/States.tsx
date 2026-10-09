@@ -2,6 +2,7 @@ import React from "react";
 import { AlertCircle } from "lucide-react";
 import { Spinner } from "./Spinner";
 import { Button } from "./Button";
+import { useI18n } from "@/i18n";
 
 export function EmptyState({
   icon,
@@ -27,10 +28,13 @@ export function EmptyState({
 }
 
 export function LoadingState({ message }: { message?: string }) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col items-center justify-center py-14 gap-3">
       <Spinner size="md" />
-      <span className="text-sm text-muted">{message ?? "Loading…"}</span>
+      <span className="text-sm text-muted">
+        {message ?? t("common.loading")}
+      </span>
     </div>
   );
 }
@@ -42,14 +46,15 @@ export function ErrorState({
   message: string;
   onRetry?: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col items-center justify-center py-14 gap-3">
       <AlertCircle size={28} className="text-red-400" />
-      <p className="text-sm text-red-400 font-medium">Error</p>
+      <p className="text-sm text-red-400 font-medium">{t("ui.error")}</p>
       <p className="text-xs text-muted text-center max-w-xs">{message}</p>
       {onRetry && (
         <Button size="sm" variant="outline" onClick={onRetry}>
-          Try again
+          {t("ui.tryAgain")}
         </Button>
       )}
     </div>

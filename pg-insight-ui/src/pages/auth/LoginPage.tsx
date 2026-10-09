@@ -4,11 +4,14 @@ import { Database, Lock, Mail } from "lucide-react";
 import { Card, Input, Button, useToast } from "@/components/ui";
 import { useAuth } from "@/store/auth";
 import { authApi } from "@/api/auth-endpoints";
+import { useI18n } from "@/i18n";
+import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 
 export default function LoginPage() {
   const { login, registerFirst, signup } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
+  const { t } = useI18n();
 
   const [mode, setMode] = useState<"login" | "setup" | "signup">("login");
   const [signupEnabled, setSignupEnabled] = useState(false);
@@ -41,17 +44,14 @@ export default function LoginPage() {
       if (mode === "login" && !signupEnabled) {
         toast({
           type: "info",
-          title: "Kira olmadingizmi?",
-          message:
-            'Agar bu birinchi marta ishga tushirilayotgan bo\'lsa, pastdagi "Birinchi admin yaratish" tugmasini bosing',
+          title: t("auth.cannotLogin"),
+          message: t("auth.firstRunHint"),
         });
       }
       toast({
         type: "error",
         title:
-          mode === "login"
-            ? "Kirish muvaffaqiyatsiz"
-            : "Ro'yxatdan o'tish muvaffaqiyatsiz",
+          mode === "login" ? t("auth.loginFailed") : t("auth.signupFailed"),
         message,
       });
     } finally {
@@ -62,28 +62,29 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--bg-base)] px-4">
       <div className="w-full max-w-sm">
+        <div className="flex justify-end mb-4">
+          <LanguageSwitcher />
+        </div>
         <div className="flex flex-col items-center mb-6">
           <div className="w-12 h-12 bg-brand-500 rounded-xl flex items-center justify-center mb-3">
             <Database size={22} className="text-white" />
           </div>
           <h1 className="text-lg font-bold text-primary">PG Insight</h1>
-          <p className="text-xs text-muted mt-1">
-            PostgreSQL monitoring platformasi
-          </p>
+          <p className="text-xs text-muted mt-1">{t("auth.tagline")}</p>
         </div>
 
         <Card padding="lg">
           <form onSubmit={handleSubmit} className="space-y-4">
             <h2 className="text-sm font-semibold text-primary">
               {mode === "login"
-                ? "Kirish"
+                ? t("auth.login")
                 : mode === "signup"
-                  ? "Hisob yaratish"
-                  : "Birinchi admin yaratish"}
+                  ? t("auth.signup")
+                  : t("auth.setup")}
             </h2>
 
             <Input
-              label="Email"
+              label={t("auth.email")}
               type="email"
               icon={<Mail size={14} />}
               value={email}
@@ -92,12 +93,14 @@ export default function LoginPage() {
               required
             />
             <Input
-              label="Parol"
+              label={t("auth.password")}
               type="password"
               icon={<Lock size={14} />}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={mode === "login" ? "••••••••" : "Kamida 8 belgi"}
+              placeholder={
+                mode === "login" ? "••••••••" : t("auth.passwordHint")
+              }
               minLength={mode === "login" ? undefined : 8}
               maxLength={mode === "login" ? undefined : 72}
               required
@@ -105,10 +108,10 @@ export default function LoginPage() {
 
             <Button type="submit" variant="primary" fullWidth loading={loading}>
               {mode === "login"
-                ? "Kirish"
+                ? t("auth.login")
                 : mode === "signup"
-                  ? "Hisob yaratish"
-                  : "Admin yaratish"}
+                  ? t("auth.signup")
+                  : t("auth.setupSubmit")}
             </Button>
 
             {signupEnabled && mode === "login" && (
@@ -117,7 +120,7 @@ export default function LoginPage() {
                 onClick={() => setMode("signup")}
                 className="w-full text-xs text-muted hover:text-brand-500 transition-colors text-center"
               >
-                Hisobingiz yo'qmi? Ro'yxatdan o'ting
+                {t("auth.toSignup")}
               </button>
             )}
 
@@ -129,9 +132,7 @@ export default function LoginPage() {
               hidden={signupEnabled && mode === "login"}
               className="w-full text-xs text-muted hover:text-brand-500 transition-colors text-center"
             >
-              {mode === "login"
-                ? "Birinchi marta ishga tushiryapsizmi? Birinchi admin yaratish"
-                : "Allaqachon hisobingiz bormi? Kirish"}
+              {mode === "login" ? t("auth.toSetup") : t("auth.toLogin")}
             </button>
           </form>
         </Card>

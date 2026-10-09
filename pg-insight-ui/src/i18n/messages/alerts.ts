@@ -1,0 +1,202 @@
+import type { Dictionary } from "../locales";
+
+export const alerts = {
+  "alerts.subtitle": {
+    ko: "임계값 규칙 및 알림 이력",
+    en: "Threshold rules & notification history",
+    uz: "Chegara qoidalari va bildirishnomalar tarixi",
+  },
+  "alerts.newRule": { ko: "새 규칙", en: "New rule", uz: "Yangi qoida" },
+  "alerts.deleteConfirm": {
+    ko: '"{name}" 규칙을 삭제하시겠습니까?',
+    en: 'Delete rule "{name}"?',
+    uz: '"{name}" qoidasini o\'chirasizmi?',
+  },
+  "alerts.ruleDeleted": {
+    ko: "규칙이 삭제되었습니다",
+    en: "Rule deleted",
+    uz: "Qoida o'chirildi",
+  },
+  "alerts.failed": { ko: "실패", en: "Failed", uz: "Muvaffaqiyatsiz" },
+  "alerts.ackFailed": {
+    ko: "확인 처리에 실패했습니다",
+    en: "Failed to acknowledge",
+    uz: "Tasdiqlab bo'lmadi",
+  },
+  "alerts.activeOne": {
+    ko: "활성 알림 {count}개",
+    en: "{count} active alert",
+    uz: "{count} ta faol ogohlantirish",
+  },
+  "alerts.activeMany": {
+    ko: "활성 알림 {count}개",
+    en: "{count} active alerts",
+    uz: "{count} ta faol ogohlantirish",
+  },
+  "alerts.triggeredAt": {
+    ko: "발생: {time}",
+    en: "Triggered {time}",
+    uz: "Ishga tushgan: {time}",
+  },
+  "alerts.ack": { ko: "확인", en: "Ack", uz: "Tasdiqlash" },
+  "alerts.rulesTab": {
+    ko: "규칙 ({count})",
+    en: "Rules ({count})",
+    uz: "Qoidalar ({count})",
+  },
+  "alerts.historyTab": {
+    ko: "이력 ({count})",
+    en: "History ({count})",
+    uz: "Tarix ({count})",
+  },
+  "alerts.noRules": {
+    ko: "등록된 알림 규칙이 없습니다",
+    en: "No alert rules yet",
+    uz: "Hali ogohlantirish qoidalari yo'q",
+  },
+  "alerts.noEvents": {
+    ko: "알림 이력이 없습니다",
+    en: "No alert events yet",
+    uz: "Hali ogohlantirish hodisalari yo'q",
+  },
+  "alerts.col.rule": { ko: "규칙", en: "Rule", uz: "Qoida" },
+  "alerts.col.condition": { ko: "조건", en: "Condition", uz: "Shart" },
+  "alerts.col.severity": { ko: "심각도", en: "Severity", uz: "Jiddiylik" },
+  "alerts.col.status": { ko: "상태", en: "Status", uz: "Holat" },
+  "alerts.col.notify": { ko: "알림 채널", en: "Notify", uz: "Xabar berish" },
+  "alerts.col.alert": { ko: "알림", en: "Alert", uz: "Ogohlantirish" },
+  "alerts.col.value": { ko: "값", en: "Value", uz: "Qiymat" },
+  "alerts.col.triggered": {
+    ko: "발생 시각",
+    en: "Triggered",
+    uz: "Ishga tushgan",
+  },
+  "alerts.on": { ko: "켜짐", en: "on", uz: "yoqilgan" },
+  "alerts.off": { ko: "꺼짐", en: "off", uz: "o'chirilgan" },
+  "alerts.webhookCount": {
+    ko: "웹훅 {count}개",
+    en: "{count} webhook",
+    uz: "{count} ta webhook",
+  },
+  "alerts.inApp": { ko: "앱 내", en: "in-app", uz: "ilova ichida" },
+  "alerts.resolved": { ko: "해결됨", en: "resolved", uz: "hal qilindi" },
+  "alerts.active": { ko: "활성", en: "active", uz: "faol" },
+  "alerts.severity.info": { ko: "정보", en: "Info", uz: "Ma'lumot" },
+  "alerts.severity.warning": {
+    ko: "경고",
+    en: "Warning",
+    uz: "Ogohlantirish",
+  },
+  "alerts.severity.critical": { ko: "심각", en: "Critical", uz: "Kritik" },
+  "alerts.operator.gt": {
+    ko: "> 초과",
+    en: "> greater than",
+    uz: "> dan katta",
+  },
+  "alerts.operator.gte": { ko: "≥ 이상", en: "≥ at least", uz: "≥ kamida" },
+  "alerts.operator.lt": { ko: "< 미만", en: "< less than", uz: "< dan kichik" },
+  "alerts.operator.lte": {
+    ko: "≤ 이하",
+    en: "≤ at most",
+    uz: "≤ ko'pi bilan",
+  },
+  "alerts.metric.connectionUsagePct": {
+    ko: "커넥션 사용률 %",
+    en: "Connection usage %",
+    uz: "Ulanishlardan foydalanish %",
+  },
+  "alerts.metric.activeQueries": {
+    ko: "활성 쿼리",
+    en: "Active queries",
+    uz: "Faol so'rovlar",
+  },
+  "alerts.metric.idleInTransaction": {
+    ko: "idle in transaction 세션 수",
+    en: "Idle in transaction count",
+    uz: "Idle in transaction soni",
+  },
+  "alerts.metric.waitingLocks": {
+    ko: "대기 중인 락",
+    en: "Waiting locks",
+    uz: "Kutayotgan qulflar",
+  },
+  "alerts.metric.longestQueryMs": {
+    ko: "최장 쿼리 실행 시간 (ms)",
+    en: "Longest query (ms)",
+    uz: "Eng uzun so'rov (ms)",
+  },
+  "alerts.metric.blockedSessions": {
+    ko: "블로킹된 세션",
+    en: "Blocked sessions",
+    uz: "Bloklangan sessiyalar",
+  },
+  "alerts.metric.deadlocksDelta": {
+    ko: "신규 데드락",
+    en: "New deadlocks",
+    uz: "Yangi deadlock'lar",
+  },
+  "alerts.metric.cacheHitRatio": {
+    ko: "캐시 히트율",
+    en: "Cache hit ratio",
+    uz: "Cache hit nisbati",
+  },
+  "alerts.metric.replicationLagBytes": {
+    ko: "복제 지연 (bytes)",
+    en: "Replication lag (bytes)",
+    uz: "Replikatsiya kechikishi (bytes)",
+  },
+  "alerts.metric.xidAge": { ko: "XID age", en: "XID age", uz: "XID age" },
+  "alerts.metric.tableBloatRatio": {
+    ko: "테이블 bloat 비율",
+    en: "Table bloat ratio",
+    uz: "Jadval bloat nisbati",
+  },
+  "alerts.metric.unusedIndexSize": {
+    ko: "미사용 인덱스 크기 (bytes)",
+    en: "Unused index size (bytes)",
+    uz: "Ishlatilmagan indeks hajmi (bytes)",
+  },
+  "alerts.metric.walSizeBytes": {
+    ko: "WAL 크기 (bytes)",
+    en: "WAL size (bytes)",
+    uz: "WAL hajmi (bytes)",
+  },
+  "alerts.metric.slowQueryCount": {
+    ko: "슬로우 쿼리 수",
+    en: "Slow query count",
+    uz: "Sekin so'rovlar soni",
+  },
+  "alerts.modalTitle": {
+    ko: "새 알림 규칙",
+    en: "New Alert Rule",
+    uz: "Yangi ogohlantirish qoidasi",
+  },
+  "alerts.ruleCreated": {
+    ko: "알림 규칙이 생성되었습니다",
+    en: "Alert rule created",
+    uz: "Ogohlantirish qoidasi yaratildi",
+  },
+  "alerts.createFailed": {
+    ko: "규칙 생성에 실패했습니다",
+    en: "Failed to create rule",
+    uz: "Qoidani yaratib bo'lmadi",
+  },
+  "alerts.createRule": {
+    ko: "규칙 생성",
+    en: "Create rule",
+    uz: "Qoida yaratish",
+  },
+  "alerts.ruleName": { ko: "규칙 이름", en: "Rule name", uz: "Qoida nomi" },
+  "alerts.ruleNamePlaceholder": {
+    ko: "높은 커넥션 사용률",
+    en: "High connection usage",
+    uz: "Ulanishlardan yuqori foydalanish",
+  },
+  "alerts.metric": { ko: "메트릭", en: "Metric", uz: "Metrika" },
+  "alerts.threshold": { ko: "임계값", en: "Threshold", uz: "Chegara qiymati" },
+  "alerts.webhookUrl": {
+    ko: "웹훅 URL (선택)",
+    en: "Webhook URL (optional)",
+    uz: "Webhook URL (ixtiyoriy)",
+  },
+} satisfies Dictionary;

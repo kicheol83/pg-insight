@@ -86,7 +86,7 @@ npx jest
 TEST_TARGET_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres npx jest
 ```
 
-23 suites, 182 tests. Highlights:
+24 suites, 188 tests. Highlights:
 
 - `auth/admin-routes.spec.ts` — reads controller metadata and fails if a mutating route has neither an ownership check nor the admin guard
 - `auth/target-access.*.spec.ts` — guard unit tests and HTTP tests for 404 on foreign targets

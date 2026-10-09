@@ -17,6 +17,7 @@
 - **백업**: `pg_dump` 기반 백업 생성 및 다운로드 (관리자 전용)
 - **알림**: 임계값 규칙, 쿨다운, 웹훅 연동
 - **Health Score / 보안 감사**: 설정 진단과 보안 점검 결과 제공
+- **다국어 UI**: 한국어(기본), English, O'zbekcha. 선택한 언어는 브라우저에 저장
 
 ## 기술 스택
 
@@ -149,7 +150,7 @@ cd ..\pg-insight-ui
 npx vitest run
 ```
 
-- Backend 182개, Frontend 41개 테스트
+- Backend 188개, Frontend 49개 테스트
 - 실제 PostgreSQL이 필요한 테스트(락 수집 쿼리, `EXPLAIN` 시간 제한)는 `TEST_TARGET_DATABASE_URL`이 있을 때만 실행됩니다.
 - `.github/workflows/ci.yml`: PostgreSQL 16 서비스 컨테이너로 타입 체크, 테스트, 마이그레이션, 빌드를 실행
 
@@ -214,7 +215,7 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
 - UI가 대상별 WebSocket room을 아직 구독하지 않아, 대시보드는 REST 폴링으로 갱신
 - 이메일 인증, 비밀번호 재설정, 계정 삭제 미구현
-- UI 문구가 우즈베크어로 되어 있음 (한국어/영어 지원 예정)
+- 서버가 만드는 문구(진단·보안 점검 결과, 권장 사항, 오류 메시지)는 아직 영어로만 제공
 - ESLint 설정 정리 필요, E2E 테스트(Playwright) 미구현
 
 ## License

@@ -39,6 +39,7 @@ import { useQuery } from "@/hooks/useQuery";
 import { useActiveTarget } from "@/store/app";
 import { liveApi } from "@/api/endpoints";
 import { cn } from "@/lib/format";
+import { useI18n, type MessageKey } from "@/i18n";
 import type {
   DiagnosticCheck,
   HealthFactor,
@@ -54,6 +55,7 @@ function StatusIcon({ status }: { status: DiagnosticCheck["status"] }) {
 }
 
 function CheckRow({ check }: { check: DiagnosticCheck }) {
+  const { t } = useI18n();
   const isProblem = check.status !== "ok";
   return (
     <div
@@ -88,8 +90,8 @@ function CheckRow({ check }: { check: DiagnosticCheck }) {
                 <div className="mt-3 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border)] p-3">
                   <p className="text-xs font-medium text-primary mb-2">
                     {check.status === "error"
-                      ? "✕ Bu muammoni qanday tuzatish mumkin:"
-                      : "⚠ Tavsiya:"}{" "}
+                      ? t("diagnostics.howToFix")
+                      : t("diagnostics.recommendation")}{" "}
                     {check.fixTitle}
                   </p>
                   {check.fixCommand && (
@@ -104,7 +106,9 @@ function CheckRow({ check }: { check: DiagnosticCheck }) {
               )}
             </>
           ) : (
-            <p className="text-xs text-muted mt-1">Muammo topilmadi</p>
+            <p className="text-xs text-muted mt-1">
+              {t("diagnostics.noIssue")}
+            </p>
           )}
         </div>
       </div>
@@ -149,11 +153,11 @@ function HealthFactorRow({ factor }: { factor: HealthFactor }) {
   );
 }
 
-const GRADE_LABEL: Record<HealthScoreReport["grade"], string> = {
-  excellent: "A'lo",
-  good: "Yaxshi",
-  fair: "O'rtacha",
-  poor: "Yomon",
+const GRADE_LABEL: Record<HealthScoreReport["grade"], MessageKey> = {
+  excellent: "diagnostics.grade.excellent",
+  good: "diagnostics.grade.good",
+  fair: "diagnostics.grade.fair",
+  poor: "diagnostics.grade.poor",
 };
 const GRADE_COLOR: Record<HealthScoreReport["grade"], string> = {
   excellent: "text-green-400",
@@ -177,11 +181,12 @@ function HealthScoreCard({
   loading: boolean;
   onRefresh: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <Card className="mb-5">
       <CardHeader
-        title="Health Score"
-        subtitle="Database operatsion holati — bloat, XID, cache, replication, backup"
+        title={t("diagnostics.healthScore")}
+        subtitle={t("diagnostics.healthScoreSubtitle")}
         icon={<Gauge size={15} />}
         action={
           <Button
@@ -191,14 +196,17 @@ function HealthScoreCard({
             onClick={onRefresh}
             loading={loading}
           >
-            Yangilash
+            {t("common.refresh")}
           </Button>
         }
       />
       {loading && !data ? (
-        <LoadingState message="Hisoblanmoqda…" />
+        <LoadingState message={t("diagnostics.calculating")} />
       ) : !data ? (
-        <EmptyState icon={<HelpCircle size={24} />} title="Ma'lumot yo'q" />
+        <EmptyState
+          icon={<HelpCircle size={24} />}
+          title={t("common.noData")}
+        />
       ) : (
         <div className="flex flex-col sm:flex-row gap-6">
           <div className="flex items-center gap-4 shrink-0">
@@ -222,11 +230,12 @@ function HealthScoreCard({
               <div
                 className={cn("text-sm font-semibold", GRADE_COLOR[data.grade])}
               >
-                {GRADE_LABEL[data.grade]}
+                {t(GRADE_LABEL[data.grade])}
               </div>
               <div className="text-[11px] text-muted mt-0.5">
-                {data.factors.filter((f) => f.status !== "ok").length} ta omil
-                ballga ta'sir qilmoqda
+                {t("diagnostics.factorsAffecting", {
+                  count: data.factors.filter((f) => f.status !== "ok").length,
+                })}
               </div>
             </div>
           </div>
@@ -244,6 +253,7 @@ function HealthScoreCard({
 export default function DiagnosticsPage() {
   const { activeTargetId } = useActiveTarget();
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   const { data, loading, refetch, updatedAt } = useQuery(
     () => liveApi.diagnostics(activeTargetId ?? ""),
@@ -261,8 +271,8 @@ export default function DiagnosticsPage() {
     return (
       <>
         <TopBar
-          title="Diagnostika"
-          subtitle="Target ulanish holatini tekshirish"
+          title={t("nav.diagnostics")}
+          subtitle={t("diagnostics.subtitleNoTarget")}
         />
         <PageContent>
           <div className="flex items-center gap-3 mb-5">
@@ -270,8 +280,8 @@ export default function DiagnosticsPage() {
           </div>
           <EmptyState
             icon={<Database size={32} />}
-            title="Target tanlanmagan"
-            message="Diagnostika o'tkazish uchun avval PostgreSQL target qo'shing yoki tanlang."
+            title={t("diagnostics.noTargetTitle")}
+            message={t("diagnostics.noTargetMessage")}
           />
         </PageContent>
       </>
@@ -287,9 +297,11 @@ export default function DiagnosticsPage() {
   return (
     <>
       <TopBar
-        title="Diagnostika"
+        title={t("nav.diagnostics")}
         subtitle={
-          updatedAt ? `Tekshirildi: hozirgina` : "Target holatini tekshirish"
+          updatedAt
+            ? t("diagnostics.checkedJustNow")
+            : t("diagnostics.subtitle")
         }
         actions={
           <Button
@@ -299,7 +311,7 @@ export default function DiagnosticsPage() {
             onClick={refetch}
             loading={loading}
           >
-            Qayta tekshirish
+            {t("diagnostics.recheck")}
           </Button>
         }
       />
@@ -316,11 +328,11 @@ export default function DiagnosticsPage() {
 
         {loading && !data ? (
           <Card>
-            <LoadingState message="Target tekshirilmoqda…" />
+            <LoadingState message={t("diagnostics.checking")} />
           </Card>
         ) : !data ? (
           <Card>
-            <EmptyState title="Tekshiruv natijasi yo'q" />
+            <EmptyState title={t("diagnostics.noResult")} />
           </Card>
         ) : (
           <>
@@ -359,28 +371,29 @@ export default function DiagnosticsPage() {
                 <div className="flex-1">
                   <h2 className="text-base font-semibold text-primary">
                     {data.overallStatus === "healthy" &&
-                      "Hammasi joyida — target to'liq ishlaydi"}
+                      t("diagnostics.healthy")}
                     {data.overallStatus === "degraded" &&
-                      "Ishlayapti, lekin ba'zi sahifalar cheklangan"}
-                    {data.overallStatus === "broken" &&
-                      "Ulanishda jiddiy muammo bor"}
+                      t("diagnostics.degraded")}
+                    {data.overallStatus === "broken" && t("diagnostics.broken")}
                   </h2>
                   <p className="text-xs text-muted mt-1">
                     {data.pgVersion && `PostgreSQL ${data.pgVersion} · `}
                     {errorCount > 0 && (
                       <span className="text-red-400 font-medium">
-                        {errorCount} ta xato
+                        {t("diagnostics.errorCount", { count: errorCount })}
                       </span>
                     )}
                     {errorCount > 0 && warningCount > 0 && " · "}
                     {warningCount > 0 && (
                       <span className="text-yellow-400 font-medium">
-                        {warningCount} ta ogohlantirish
+                        {t("diagnostics.warningCount", {
+                          count: warningCount,
+                        })}
                       </span>
                     )}
                     {errorCount === 0 &&
                       warningCount === 0 &&
-                      "Barcha tekshiruvlar muvaffaqiyatli"}
+                      t("diagnostics.allPassed")}
                   </p>
                 </div>
                 {canProceed && (
@@ -389,7 +402,7 @@ export default function DiagnosticsPage() {
                     icon={<ArrowRight size={14} />}
                     onClick={() => navigate("/")}
                   >
-                    Dashboard'ga o'tish
+                    {t("diagnostics.goToDashboard")}
                   </Button>
                 )}
               </div>
@@ -403,8 +416,7 @@ export default function DiagnosticsPage() {
 
             {!canProceed && (
               <p className="text-xs text-muted text-center mt-5">
-                Yuqoridagi xatolarni tuzatgach, "Qayta tekshirish" tugmasini
-                bosing — muammo yo'qolgach, davom etish tugmasi paydo bo'ladi.
+                {t("diagnostics.fixHint")}
               </p>
             )}
           </>

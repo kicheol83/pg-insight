@@ -38,6 +38,13 @@ import { liveApi, securityApi } from "@/api/endpoints";
 import { fmtBytes, cn } from "@/lib/format";
 import { severityBadge } from "@/lib/colors";
 import type { PgSetting, SecurityCheck } from "@/types/model";
+import { useI18n, type MessageKey } from "@/i18n";
+
+const SEVERITY_LABELS: Record<string, MessageKey> = {
+  critical: "settings.severity.critical",
+  warning: "settings.severity.warning",
+  info: "settings.severity.info",
+};
 
 function SettingsGroup({
   category,
@@ -47,6 +54,7 @@ function SettingsGroup({
   settings: PgSetting[];
 }) {
   const [open, setOpen] = useState(false);
+  const { t } = useI18n();
   return (
     <div className="border border-[var(--border)] rounded-xl overflow-hidden">
       <button
@@ -62,7 +70,7 @@ function SettingsGroup({
           <span className="text-xs font-semibold text-primary">{category}</span>
         </div>
         <span className="text-[10px] text-muted">
-          {settings.length} settings
+          {t("settings.settingsCount", { count: settings.length })}
         </span>
       </button>
       {open && (
@@ -77,7 +85,7 @@ function SettingsGroup({
                   <code className="mono text-xs text-primary">{s.name}</code>
                   {s.isPendingRestart && (
                     <Badge variant="warning" size="xs">
-                      restart pending
+                      {t("settings.restartPending")}
                     </Badge>
                   )}
                 </div>
@@ -109,6 +117,7 @@ function SecurityStatusIcon({ status }: { status: SecurityCheck["status"] }) {
 }
 
 function SecurityCheckCard({ check }: { check: SecurityCheck }) {
+  const { t } = useI18n();
   return (
     <div
       className={cn(
@@ -138,7 +147,7 @@ function SecurityCheckCard({ check }: { check: SecurityCheck }) {
               ))}
               {check.items.length > 8 && (
                 <span className="text-[10px] text-muted self-center">
-                  +{check.items.length - 8} more
+                  {t("settings.moreItems", { count: check.items.length - 8 })}
                 </span>
               )}
             </div>
@@ -147,7 +156,9 @@ function SecurityCheckCard({ check }: { check: SecurityCheck }) {
           {check.recommendation && (
             <div className="mt-3 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border)] p-2.5">
               <p className="text-[11px] text-secondary">
-                <span className="font-medium text-primary">Tavsiya: </span>
+                <span className="font-medium text-primary">
+                  {`${t("settings.recommendation")} `}
+                </span>
                 {check.recommendation}
               </p>
             </div>
@@ -161,6 +172,7 @@ function SecurityCheckCard({ check }: { check: SecurityCheck }) {
 export default function SettingsPage() {
   const { activeTargetId } = useActiveTarget();
   const [settingSearch, setSettingSearch] = useState("");
+  const { t } = useI18n();
 
   const {
     data: sys,
@@ -200,8 +212,8 @@ export default function SettingsPage() {
   return (
     <>
       <TopBar
-        title="Settings & System"
-        subtitle="Server configuration, databases and extensions"
+        title={t("settings.title")}
+        subtitle={t("settings.subtitle")}
         actions={
           <Button
             size="sm"
@@ -210,7 +222,7 @@ export default function SettingsPage() {
             onClick={refetch}
             loading={loading}
           >
-            Refresh
+            {t("common.refresh")}
           </Button>
         }
       />
@@ -223,7 +235,7 @@ export default function SettingsPage() {
         {(sys?.configIssues?.length ?? 0) > 0 && (
           <Card className="mb-5">
             <CardHeader
-              title="Configuration recommendations"
+              title={t("settings.configRecommendations")}
               icon={<AlertTriangle size={15} className="text-yellow-400" />}
             />
             <div className="space-y-2">
@@ -238,7 +250,9 @@ export default function SettingsPage() {
                       severityBadge(issue.severity),
                     )}
                   >
-                    {issue.severity}
+                    {SEVERITY_LABELS[issue.severity]
+                      ? t(SEVERITY_LABELS[issue.severity])
+                      : issue.severity}
                   </span>
                   <div>
                     <div className="text-xs text-primary">
@@ -247,7 +261,9 @@ export default function SettingsPage() {
                       </code>
                       {" = "}
                       <code className="mono">{issue.current}</code>
-                      <span className="text-muted"> → recommended: </span>
+                      <span className="text-muted">
+                        {` → ${t("settings.recommendedValue")} `}
+                      </span>
                       <code className="mono text-green-400">
                         {issue.recommended}
                       </code>
@@ -265,42 +281,54 @@ export default function SettingsPage() {
         <Tabs defaultValue="server">
           <TabList>
             <Tab value="server" icon={<Server size={13} />}>
-              Server
+              {t("settings.tabServer")}
             </Tab>
             <Tab value="settings" icon={<SlidersHorizontal size={13} />}>
               pg_settings
             </Tab>
             <Tab value="databases" icon={<Database size={13} />}>
-              Databases
+              {t("settings.tabDatabases")}
             </Tab>
             <Tab value="extensions" icon={<Puzzle size={13} />}>
-              Extensions
+              {t("settings.tabExtensions")}
             </Tab>
             <Tab value="security" icon={<Shield size={13} />}>
-              Security
+              {t("settings.tabSecurity")}
             </Tab>
           </TabList>
 
           <TabPanel value="server">
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
               <Card>
-                <CardHeader title="Server info" icon={<Server size={15} />} />
+                <CardHeader
+                  title={t("settings.serverInfo")}
+                  icon={<Server size={15} />}
+                />
                 <div className="space-y-0">
                   {[
-                    { label: "Version", value: sys?.server?.version },
                     {
-                      label: "Data directory",
+                      label: t("settings.version"),
+                      value: sys?.server?.version,
+                    },
+                    {
+                      label: t("settings.dataDirectory"),
                       value: sys?.server?.dataDirectory,
                       mono: true,
                     },
-                    { label: "Timezone", value: sys?.server?.timezone },
-                    { label: "Encoding", value: sys?.server?.serverEncoding },
                     {
-                      label: "Max connections",
+                      label: t("settings.timezone"),
+                      value: sys?.server?.timezone,
+                    },
+                    {
+                      label: t("settings.encoding"),
+                      value: sys?.server?.serverEncoding,
+                    },
+                    {
+                      label: t("settings.maxConnections"),
                       value: sys?.server?.maxConnections,
                     },
                     {
-                      label: "Uptime",
+                      label: t("settings.uptime"),
                       value: sys?.server?.uptimeHours
                         ? `${Math.floor(sys.server.uptimeHours / 24)}d ${Math.round(sys.server.uptimeHours % 24)}h`
                         : undefined,
@@ -326,7 +354,7 @@ export default function SettingsPage() {
 
               <Card>
                 <CardHeader
-                  title="Key settings"
+                  title={t("settings.keySettings")}
                   icon={<SlidersHorizontal size={15} />}
                 />
                 <div className="space-y-0">
@@ -344,7 +372,7 @@ export default function SettingsPage() {
                     ),
                   )}
                   {!Object.keys(sys?.keySettings ?? {}).length && (
-                    <EmptyState title="No data" />
+                    <EmptyState title={t("common.noData")} />
                   )}
                 </div>
               </Card>
@@ -360,7 +388,7 @@ export default function SettingsPage() {
               <input
                 value={settingSearch}
                 onChange={(e) => setSettingSearch(e.target.value)}
-                placeholder="Search settings (e.g. shared_buffers, work_mem)…"
+                placeholder={t("settings.searchPlaceholder")}
                 className="input pl-8 w-full max-w-md text-xs"
               />
             </div>
@@ -374,7 +402,7 @@ export default function SettingsPage() {
                     <SettingsGroup key={cat} category={cat} settings={items} />
                   ))}
                 {!Object.keys(grouped).length && (
-                  <EmptyState title="No settings match" />
+                  <EmptyState title={t("settings.noSettingsMatch")} />
                 )}
               </div>
             )}
@@ -386,11 +414,11 @@ export default function SettingsPage() {
                 loading={loading && !sys}
                 data={(sys?.databases ?? []).filter((d) => !d.isTemplate)}
                 keyFn={(d) => d.name}
-                emptyMsg="No databases"
+                emptyMsg={t("settings.noDatabases")}
                 columns={[
                   {
                     key: "name",
-                    header: "Database",
+                    header: t("nav.database"),
                     render: (d) => (
                       <span className="mono text-xs text-primary font-medium">
                         {d.name}
@@ -399,7 +427,7 @@ export default function SettingsPage() {
                   },
                   {
                     key: "owner",
-                    header: "Owner",
+                    header: t("settings.colOwner"),
                     width: "120px",
                     render: (d) => (
                       <span className="text-xs text-secondary">{d.owner}</span>
@@ -407,7 +435,7 @@ export default function SettingsPage() {
                   },
                   {
                     key: "size",
-                    header: "Size",
+                    header: t("settings.colSize"),
                     width: "100px",
                     align: "right",
                     render: (d) => (
@@ -418,7 +446,7 @@ export default function SettingsPage() {
                   },
                   {
                     key: "conns",
-                    header: "Connections",
+                    header: t("nav.connections"),
                     width: "110px",
                     align: "right",
                     render: (d) => (
@@ -429,7 +457,7 @@ export default function SettingsPage() {
                   },
                   {
                     key: "age",
-                    header: "XID age",
+                    header: t("settings.colXidAge"),
                     width: "100px",
                     align: "right",
                     render: (d) => (
@@ -456,11 +484,11 @@ export default function SettingsPage() {
                 loading={loading && !sys}
                 data={sys?.extensions ?? []}
                 keyFn={(e) => e.name}
-                emptyMsg="No extensions installed"
+                emptyMsg={t("settings.noExtensions")}
                 columns={[
                   {
                     key: "name",
-                    header: "Extension",
+                    header: t("settings.colExtension"),
                     render: (e) => (
                       <span className="mono text-xs text-primary font-medium">
                         {e.name}
@@ -469,7 +497,7 @@ export default function SettingsPage() {
                   },
                   {
                     key: "version",
-                    header: "Version",
+                    header: t("settings.version"),
                     width: "90px",
                     render: (e) => (
                       <Badge variant="default" size="xs">
@@ -479,7 +507,7 @@ export default function SettingsPage() {
                   },
                   {
                     key: "schema",
-                    header: "Schema",
+                    header: t("settings.colSchema"),
                     width: "110px",
                     render: (e) => (
                       <span className="text-xs text-secondary mono">
@@ -489,7 +517,7 @@ export default function SettingsPage() {
                   },
                   {
                     key: "comment",
-                    header: "Description",
+                    header: t("settings.colDescription"),
                     render: (e) => (
                       <span className="text-[11px] text-muted">
                         {e.comment ?? "—"}
@@ -503,11 +531,7 @@ export default function SettingsPage() {
 
           <TabPanel value="security">
             <div className="flex items-center justify-between mb-4">
-              <p className="text-xs text-muted">
-                Faqat o'qish — hech qanday amal bajarilmaydi. Ba'zi tekshiruvlar
-                monitoring foydalanuvchisining huquqiga qarab "unavailable"
-                bo'lishi mumkin.
-              </p>
+              <p className="text-xs text-muted">{t("settings.securityNote")}</p>
               <Button
                 size="xs"
                 variant="ghost"
@@ -515,16 +539,19 @@ export default function SettingsPage() {
                 onClick={refetchSecurity}
                 loading={securityLoading}
               >
-                Qayta tekshirish
+                {t("settings.recheck")}
               </Button>
             </div>
             {securityLoading && !securityReport ? (
               <Card>
-                <LoadingState message="Xavfsizlik tekshiruvi o'tkazilmoqda…" />
+                <LoadingState message={t("settings.securityRunning")} />
               </Card>
             ) : !securityReport?.checks?.length ? (
               <Card>
-                <EmptyState icon={<Shield size={28} />} title="Ma'lumot yo'q" />
+                <EmptyState
+                  icon={<Shield size={28} />}
+                  title={t("common.noData")}
+                />
               </Card>
             ) : (
               <div className="space-y-3">

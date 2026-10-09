@@ -1,9 +1,11 @@
 import { fmtXidAge, cn } from "@/lib/format";
 import { xidAgeColor } from "@/lib/colors";
+import { useI18n } from "@/i18n";
 
 const MAX_XID = 2_000_000_000;
 
 export function XidAgeGauge({ age }: { age: number }) {
+  const { t } = useI18n();
   const pct = Math.min((age / MAX_XID) * 100, 100);
   return (
     <div>
@@ -13,7 +15,7 @@ export function XidAgeGauge({ age }: { age: number }) {
         >
           {fmtXidAge(age)}
         </span>
-        <span className="text-xs text-muted">of 2B wraparound limit</span>
+        <span className="text-xs text-muted">{t("vacuum.gaugeLimit")}</span>
       </div>
       <div className="relative h-3 rounded-full overflow-hidden flex">
         <div className="h-full bg-green-500/25" style={{ width: "25%" }} />

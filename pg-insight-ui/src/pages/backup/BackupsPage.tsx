@@ -27,23 +27,26 @@ import { useActiveTarget } from "@/store/app";
 import { backupsApi } from "@/api/endpoints";
 import { fmtBytes, fmtRelative } from "@/lib/format";
 import type { Backup } from "@/types/model";
+import { useI18n } from "@/i18n";
 
 function StatusBadge({ status }: { status: Backup["status"] }) {
+  const { t } = useI18n();
   if (status === "completed")
     return (
       <Badge variant="success" size="xs">
-        <CheckCircle2 size={10} /> completed
+        <CheckCircle2 size={10} /> {t("backups.status.completed")}
       </Badge>
     );
   if (status === "failed")
     return (
       <Badge variant="error" size="xs">
-        <XCircle size={10} /> failed
+        <XCircle size={10} /> {t("backups.status.failed")}
       </Badge>
     );
   return (
     <Badge variant="info" size="xs" dot>
-      <Loader2 size={10} className="animate-spin-c" /> running
+      <Loader2 size={10} className="animate-spin-c" />{" "}
+      {t("backups.status.running")}
     </Badge>
   );
 }
@@ -59,6 +62,7 @@ function duration(startedAt: string, completedAt: string | null): string {
 export default function BackupsPage() {
   const { activeTargetId } = useActiveTarget();
   const toast = useToast();
+  const { t, locale } = useI18n();
   const [starting, setStarting] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
@@ -72,14 +76,17 @@ export default function BackupsPage() {
   if (!activeTargetId) {
     return (
       <>
-        <TopBar title="Backups" subtitle="pg_dump orqali logical backup" />
+        <TopBar
+          title={t("nav.backups")}
+          subtitle={t("backups.subtitleShort")}
+        />
         <PageContent>
           <div className="flex items-center gap-3 mb-5">
             <TargetSelector />
           </div>
           <EmptyState
             icon={<HardDriveDownload size={32} />}
-            title="Target tanlanmagan"
+            title={t("backups.noTarget")}
           />
         </PageContent>
       </>
@@ -92,15 +99,14 @@ export default function BackupsPage() {
       await backupsApi.start(activeTargetId);
       toast({
         type: "success",
-        title: "Backup boshlandi",
-        message:
-          "Jarayon fon rejimida davom etmoqda — bu sahifa avtomatik yangilanadi",
+        title: t("backups.started"),
+        message: t("backups.startedMessage"),
       });
       refetch();
     } catch (err) {
       toast({
         type: "error",
-        title: "Backup boshlanmadi",
+        title: t("backups.startFailed"),
         message: (err as Error).message,
       });
     } finally {
@@ -123,7 +129,7 @@ export default function BackupsPage() {
     } catch (err) {
       toast({
         type: "error",
-        title: "Yuklab bo'lmadi",
+        title: t("backups.downloadFailed"),
         message: (err as Error).message,
       });
     } finally {
@@ -132,20 +138,15 @@ export default function BackupsPage() {
   };
 
   const handleDelete = async (backup: Backup) => {
-    if (
-      !confirm(
-        `Backup'ni o'chirishni tasdiqlaysizmi? Bu amalni qaytarib bo'lmaydi.`,
-      )
-    )
-      return;
+    if (!confirm(t("backups.deleteConfirm"))) return;
     try {
       await backupsApi.remove(activeTargetId, backup.id);
-      toast({ type: "success", title: "Backup o'chirildi" });
+      toast({ type: "success", title: t("backups.deleted") });
       refetch();
     } catch (err) {
       toast({
         type: "error",
-        title: "O'chirib bo'lmadi",
+        title: t("backups.deleteFailed"),
         message: (err as Error).message,
       });
     }
@@ -158,8 +159,8 @@ export default function BackupsPage() {
   return (
     <>
       <TopBar
-        title="Backups"
-        subtitle="pg_dump orqali logical backup — bitta tugma bilan"
+        title={t("nav.backups")}
+        subtitle={t("backups.subtitle")}
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -169,7 +170,7 @@ export default function BackupsPage() {
               onClick={refetch}
               loading={loading}
             >
-              Yangilash
+              {t("common.refresh")}
             </Button>
             <Button
               size="sm"
@@ -179,7 +180,7 @@ export default function BackupsPage() {
               loading={starting}
               disabled={hasRunning}
             >
-              Backup boshlash
+              {t("backups.start")}
             </Button>
           </div>
         }
@@ -189,7 +190,7 @@ export default function BackupsPage() {
           <TargetSelector />
           {hasRunning && (
             <Badge variant="info" size="sm" dot>
-              Backup ishlamoqda…
+              {t("backups.running")}
             </Badge>
           )}
         </div>
@@ -197,7 +198,7 @@ export default function BackupsPage() {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-5">
           <Card padding="sm">
             <div className="text-[10px] text-muted uppercase tracking-wide mb-1">
-              Jami backup
+              {t("backups.total")}
             </div>
             <div className="text-2xl font-bold tabular-nums text-primary">
               {data?.length ?? "—"}
@@ -205,7 +206,7 @@ export default function BackupsPage() {
           </Card>
           <Card padding="sm">
             <div className="text-[10px] text-muted uppercase tracking-wide mb-1">
-              Muvaffaqiyatli
+              {t("backups.successful")}
             </div>
             <div className="text-2xl font-bold tabular-nums text-green-400">
               {(data ?? []).filter((b) => b.status === "completed").length}
@@ -213,7 +214,7 @@ export default function BackupsPage() {
           </Card>
           <Card padding="sm">
             <div className="text-[10px] text-muted uppercase tracking-wide mb-1">
-              Umumiy hajm
+              {t("backups.totalSize")}
             </div>
             <div className="text-2xl font-bold tabular-nums text-primary">
               {fmtBytes(totalSize)}
@@ -230,13 +231,10 @@ export default function BackupsPage() {
               />
               <div>
                 <p className="text-sm font-medium text-primary">
-                  Backup'lar katta disk hajmini egallayapti
+                  {t("backups.diskWarningTitle")}
                 </p>
                 <p className="text-xs text-secondary mt-1">
-                  Eski, kerak bo'lmagan backup'larni o'chirib, disk joyini
-                  bo'shatishni ko'rib chiqing. Hozircha avtomatik saqlash
-                  siyosati (retention policy) mavjud emas — o'chirish qo'lda
-                  amalga oshiriladi.
+                  {t("backups.diskWarningMessage")}
                 </p>
               </div>
             </div>
@@ -245,35 +243,35 @@ export default function BackupsPage() {
 
         <Card>
           <CardHeader
-            title="Backup tarixi"
+            title={t("backups.history")}
             icon={<HardDriveDownload size={15} />}
           />
           <DataTable<Backup>
             loading={loading && !data}
             data={data ?? []}
             keyFn={(b) => b.id}
-            emptyMsg="Hali backup olinmagan"
+            emptyMsg={t("backups.empty")}
             emptyIcon={<HardDriveDownload size={32} />}
             columns={[
               {
                 key: "status",
-                header: "Holat",
+                header: t("backups.colStatus"),
                 width: "110px",
                 render: (b) => <StatusBadge status={b.status} />,
               },
               {
                 key: "started",
-                header: "Boshlangan",
+                header: t("backups.colStarted"),
                 width: "120px",
                 render: (b) => (
                   <span className="text-xs text-secondary">
-                    {fmtRelative(b.startedAt)}
+                    {fmtRelative(b.startedAt, locale)}
                   </span>
                 ),
               },
               {
                 key: "duration",
-                header: "Davomiylik",
+                header: t("backups.colDuration"),
                 width: "100px",
                 align: "right",
                 render: (b) => (
@@ -284,7 +282,7 @@ export default function BackupsPage() {
               },
               {
                 key: "size",
-                header: "Hajm",
+                header: t("backups.colSize"),
                 width: "90px",
                 align: "right",
                 render: (b) => (
@@ -295,7 +293,7 @@ export default function BackupsPage() {
               },
               {
                 key: "error",
-                header: "Xato",
+                header: t("backups.colError"),
                 render: (b) =>
                   b.errorMessage ? (
                     <span

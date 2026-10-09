@@ -5,6 +5,8 @@ import { useTheme } from "@/store/theme";
 import { useAppStore } from "@/store/app";
 import { useAuth } from "@/store/auth";
 import { LiveDot } from "@/components/ui";
+import { useI18n } from "@/i18n";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 
 interface TopBarProps {
   title: string;
@@ -16,6 +18,7 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
   const { theme, setTheme } = useTheme();
   const { state } = useAppStore();
   const { logout } = useAuth();
+  const { t } = useI18n();
 
   return (
     <header className="h-14 flex items-center justify-between px-5 border-b border-[var(--border)] bg-[var(--bg-card)] sticky top-0 z-20">
@@ -27,12 +30,13 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
       <div className="flex items-center gap-2">
         {actions}
 
-        {/* Theme switcher — light / dark / system */}
+        <LanguageSwitcher />
+
         <div className="flex items-center rounded-lg border border-[var(--border)] p-0.5 gap-0.5">
           {[
-            { icon: Sun, value: "light" as const, tip: "Light" },
-            { icon: Moon, value: "dark" as const, tip: "Dark" },
-            { icon: Monitor, value: "system" as const, tip: "System" },
+            { icon: Sun, value: "light" as const, tip: t("theme.light") },
+            { icon: Moon, value: "dark" as const, tip: t("theme.dark") },
+            { icon: Monitor, value: "system" as const, tip: t("theme.system") },
           ].map(({ icon: Icon, value, tip }) => (
             <button
               key={value}
@@ -50,17 +54,19 @@ export function TopBar({ title, subtitle, actions }: TopBarProps) {
           ))}
         </div>
 
-        {/* WS status */}
         <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border)]">
           <LiveDot active={state.wsStatus === "connected"} size="xs" />
           <span className="text-xs text-muted hidden sm:block">
-            {state.wsStatus === "connected" ? "Live" : "Offline"}
+            {state.wsStatus === "connected"
+              ? t("layout.live")
+              : t("layout.offline")}
           </span>
         </div>
 
         <button
           onClick={logout}
-          title="Chiqish"
+          title={t("layout.logout")}
+          aria-label={t("layout.logout")}
           className="p-2 rounded-lg text-muted hover:text-red-400 hover:bg-[var(--bg-hover)] transition-colors"
         >
           <LogOut size={14} />

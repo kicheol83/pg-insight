@@ -20,6 +20,14 @@ import { fmtRelative, cn } from "@/lib/format";
 import { statusBadge } from "@/lib/colors";
 import { AddTargetModal } from "./AddTargetModal";
 import type { Target } from "@/types/model";
+import { useI18n, type MessageKey } from "@/i18n";
+
+const STATUS_LABELS: Record<string, MessageKey> = {
+  active: "targets.status.active",
+  connecting: "targets.status.connecting",
+  error: "targets.status.error",
+  paused: "targets.status.paused",
+};
 
 function StatusIcon({ status }: { status: string }) {
   switch (status) {
@@ -36,6 +44,7 @@ function StatusIcon({ status }: { status: string }) {
 
 export default function TargetsPage() {
   const toast = useToast();
+  const { t, locale } = useI18n();
   const [addOpen, setAddOpen] = useState(false);
 
   const {
@@ -44,30 +53,30 @@ export default function TargetsPage() {
     refetch,
   } = useQuery<Target[]>(() => targetsApi.list(), { refreshInterval: 10_000 });
 
-  const handleRemove = async (t: Target) => {
-    if (!confirm(`Remove "${t.name}"? This will stop monitoring.`)) return;
+  const handleRemove = async (target: Target) => {
+    if (!confirm(t("targets.removeConfirm", { name: target.name }))) return;
     try {
-      await targetsApi.remove(t.id);
-      toast({ type: "success", title: "Target removed" });
+      await targetsApi.remove(target.id);
+      toast({ type: "success", title: t("targets.removed") });
       refetch();
     } catch (err) {
       toast({
         type: "error",
-        title: "Failed to remove",
+        title: t("targets.removeFailed"),
         message: (err as Error).message,
       });
     }
   };
 
-  const handlePauseResume = async (t: Target) => {
+  const handlePauseResume = async (target: Target) => {
     try {
-      if (t.status === "paused") await targetsApi.resume(t.id);
-      else await targetsApi.pause(t.id);
+      if (target.status === "paused") await targetsApi.resume(target.id);
+      else await targetsApi.pause(target.id);
       refetch();
     } catch (err) {
       toast({
         type: "error",
-        title: "Action failed",
+        title: t("targets.actionFailed"),
         message: (err as Error).message,
       });
     }
@@ -76,8 +85,8 @@ export default function TargetsPage() {
   return (
     <>
       <TopBar
-        title="Targets"
-        subtitle="Monitored PostgreSQL instances"
+        title={t("nav.targets")}
+        subtitle={t("targets.subtitle")}
         actions={
           <Button
             variant="primary"
@@ -85,7 +94,7 @@ export default function TargetsPage() {
             icon={<Plus size={14} />}
             onClick={() => setAddOpen(true)}
           >
-            Add target
+            {t("targets.add")}
           </Button>
         }
       />
@@ -94,22 +103,22 @@ export default function TargetsPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
           {[
             {
-              label: "Total",
+              label: t("targets.statTotal"),
               value: targets?.length ?? 0,
               icon: <Database size={15} />,
             },
             {
-              label: "Active",
+              label: t("targets.statActive"),
               value: targets?.filter((t) => t.status === "active").length ?? 0,
               icon: <CheckCircle2 size={15} className="text-green-400" />,
             },
             {
-              label: "Errors",
+              label: t("targets.statErrors"),
               value: targets?.filter((t) => t.status === "error").length ?? 0,
               icon: <XCircle size={15} className="text-red-400" />,
             },
             {
-              label: "Collecting",
+              label: t("targets.statCollecting"),
               value: targets?.filter((t) => t.isCollecting).length ?? 0,
               icon: <RefreshCw size={15} className="text-brand-500" />,
             },
@@ -142,15 +151,15 @@ export default function TargetsPage() {
         ) : !targets?.length ? (
           <EmptyState
             icon={<Database size={40} />}
-            title="No targets added"
-            message="Add your first PostgreSQL instance to start monitoring"
+            title={t("target.none")}
+            message={t("targets.emptyMessage")}
             action={
               <Button
                 variant="primary"
                 icon={<Plus size={14} />}
                 onClick={() => setAddOpen(true)}
               >
-                Add PostgreSQL target
+                {t("target.add")}
               </Button>
             }
           />
@@ -176,23 +185,27 @@ export default function TargetsPage() {
                       statusBadge(target.status),
                     )}
                   >
-                    {target.status}
+                    {STATUS_LABELS[target.status]
+                      ? t(STATUS_LABELS[target.status])
+                      : target.status}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   <div className="bg-[var(--bg-subtle)] rounded-lg p-2.5">
-                    <div className="text-[10px] text-muted mb-1">Pool</div>
+                    <div className="text-[10px] text-muted mb-1">
+                      {t("targets.pool")}
+                    </div>
                     <div className="text-sm font-bold text-primary">
                       {target.poolTotal}
                     </div>
                     <div className="text-[10px] text-muted">
-                      {target.poolIdle} idle
+                      {t("targets.poolIdle", { count: target.poolIdle })}
                     </div>
                   </div>
                   <div className="bg-[var(--bg-subtle)] rounded-lg p-2.5">
                     <div className="text-[10px] text-muted mb-1">
-                      PG Version
+                      {t("targets.pgVersion")}
                     </div>
                     <div className="text-sm font-bold text-primary">
                       {target.pgVersion ?? "—"}
@@ -200,11 +213,11 @@ export default function TargetsPage() {
                   </div>
                   <div className="bg-[var(--bg-subtle)] rounded-lg p-2.5">
                     <div className="text-[10px] text-muted mb-1">
-                      Last collected
+                      {t("targets.lastCollected")}
                     </div>
                     <div className="text-[11px] font-bold text-primary">
                       {target.lastCollectedAt
-                        ? fmtRelative(target.lastCollectedAt)
+                        ? fmtRelative(target.lastCollectedAt, locale)
                         : "—"}
                     </div>
                   </div>
@@ -219,7 +232,7 @@ export default function TargetsPage() {
                   </Badge>
                   {target.isCollecting && (
                     <Badge variant="info" size="xs" dot>
-                      collecting
+                      {t("targets.collecting")}
                     </Badge>
                   )}
                 </div>
@@ -243,7 +256,9 @@ export default function TargetsPage() {
                     }
                     onClick={() => handlePauseResume(target)}
                   >
-                    {target.status === "paused" ? "Resume" : "Pause"}
+                    {target.status === "paused"
+                      ? t("targets.resume")
+                      : t("targets.pause")}
                   </Button>
                   <Button
                     size="xs"
@@ -251,7 +266,7 @@ export default function TargetsPage() {
                     icon={<RefreshCw size={12} />}
                     onClick={() => targetsApi.refresh(target.id)}
                   >
-                    Refresh
+                    {t("common.refresh")}
                   </Button>
                   <div className="flex-1" />
                   <Button

@@ -34,9 +34,20 @@ import { liveApi, metricsApi } from "@/api/endpoints";
 import { fmtXidAge, tickTime, cn } from "@/lib/format";
 import { xidAgeColor, severityBadge } from "@/lib/colors";
 import { XidAgeGauge } from "./XidAgeGauge";
+import { useI18n, type MessageKey } from "@/i18n";
+
+const AGE_STATUS_LABELS: Record<
+  "warning" | "critical" | "emergency",
+  MessageKey
+> = {
+  warning: "vacuum.ageStatus.warning",
+  critical: "vacuum.ageStatus.critical",
+  emergency: "vacuum.ageStatus.emergency",
+};
 
 export default function VacuumPage() {
   const { activeTargetId } = useActiveTarget();
+  const { t } = useI18n();
 
   const { data, loading, refetch } = useQuery(
     () => liveApi.vacuumProgress(activeTargetId ?? ""),
@@ -50,8 +61,8 @@ export default function VacuumPage() {
   return (
     <>
       <TopBar
-        title="Vacuum & XID"
-        subtitle="Autovacuum health & transaction ID wraparound prevention"
+        title={t("vacuum.title")}
+        subtitle={t("vacuum.subtitle")}
         actions={
           <Button
             size="sm"
@@ -60,7 +71,7 @@ export default function VacuumPage() {
             onClick={refetch}
             loading={loading}
           >
-            Refresh
+            {t("common.refresh")}
           </Button>
         }
       />
@@ -69,22 +80,21 @@ export default function VacuumPage() {
           <TargetSelector />
           {data?.hasXidRisk && (
             <Badge variant="error" size="sm" dot>
-              XID wraparound risk!
+              {t("vacuum.xidRisk")}
             </Badge>
           )}
           {!data?.settings?.autovacuumEnabled && data && (
             <Badge variant="error" size="sm">
-              <AlertTriangle size={11} /> Autovacuum disabled globally
+              <AlertTriangle size={11} /> {t("vacuum.autovacuumDisabled")}
             </Badge>
           )}
         </div>
 
-        {/* XID gauge + autovacuum status */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
           <Card>
             <CardHeader
-              title="Database XID age"
-              subtitle="Transaction wraparound proximity — VACUUM FREEZE resets this"
+              title={t("vacuum.dbXidAge")}
+              subtitle={t("vacuum.dbXidAgeSubtitle")}
               icon={<Clock size={15} />}
             />
             {loading && !data ? (
@@ -95,7 +105,7 @@ export default function VacuumPage() {
             <div className="grid grid-cols-2 gap-3 mt-4">
               <div className="p-2.5 bg-[var(--bg-subtle)] rounded-lg">
                 <div className="text-[10px] text-muted mb-1">
-                  Max table XID age
+                  {t("vacuum.maxTableXidAge")}
                 </div>
                 <div
                   className={cn(
@@ -108,7 +118,7 @@ export default function VacuumPage() {
               </div>
               <div className="p-2.5 bg-[var(--bg-subtle)] rounded-lg">
                 <div className="text-[10px] text-muted mb-1">
-                  Freeze max age
+                  {t("vacuum.freezeMaxAge")}
                 </div>
                 <div className="text-sm font-bold text-primary">
                   {fmtXidAge(
@@ -121,33 +131,33 @@ export default function VacuumPage() {
 
           <Card>
             <CardHeader
-              title="Autovacuum status"
+              title={t("vacuum.autovacuumStatus")}
               icon={<Settings2 size={15} />}
             />
             <div className="grid grid-cols-2 gap-3">
               <StatBox
-                label="Workers"
+                label={t("vacuum.workers")}
                 value={`${data?.autovacuum?.activeWorkers ?? 0} / ${data?.autovacuum?.maxWorkers ?? 3}`}
                 loading={loading && !data}
               />
               <StatBox
-                label="Enabled"
+                label={t("vacuum.enabled")}
                 value={
                   data?.settings?.autovacuumEnabled ? (
-                    <span className="text-green-400">Yes</span>
+                    <span className="text-green-400">{t("vacuum.yes")}</span>
                   ) : (
-                    <span className="text-red-400">No</span>
+                    <span className="text-red-400">{t("vacuum.no")}</span>
                   )
                 }
                 loading={loading && !data}
               />
               <StatBox
-                label="Pending vacuum"
+                label={t("vacuum.pendingVacuum")}
                 value={data?.autovacuum?.tablesPendingVacuum ?? "—"}
                 loading={loading && !data}
               />
               <StatBox
-                label="Pending analyze"
+                label={t("vacuum.pendingAnalyze")}
                 value={data?.autovacuum?.tablesPendingAnalyze ?? "—"}
                 loading={loading && !data}
               />
@@ -155,11 +165,10 @@ export default function VacuumPage() {
           </Card>
         </div>
 
-        {/* XID trend */}
         <Card className="mb-5">
           <CardHeader
-            title="XID age trend (24h)"
-            subtitle="Watch for continuous growth without drops — drops mean successful freeze"
+            title={t("vacuum.xidTrend")}
+            subtitle={t("vacuum.xidTrendSubtitle")}
             icon={<Clock size={15} />}
           />
           <ResponsiveContainer width="100%" height={180}>
@@ -181,7 +190,7 @@ export default function VacuumPage() {
                 stroke="#eab308"
                 strokeDasharray="4 4"
                 label={{
-                  value: "freeze threshold",
+                  value: t("vacuum.freezeThreshold"),
                   fontSize: 10,
                   fill: "#eab308",
                 }}
@@ -190,7 +199,11 @@ export default function VacuumPage() {
                 y={1_000_000_000}
                 stroke="#ef4444"
                 strokeDasharray="4 4"
-                label={{ value: "danger", fontSize: 10, fill: "#ef4444" }}
+                label={{
+                  value: t("vacuum.danger"),
+                  fontSize: 10,
+                  fill: "#ef4444",
+                }}
               />
               <Line
                 type="monotone"
@@ -204,15 +217,16 @@ export default function VacuumPage() {
         </Card>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-          {/* Active vacuums */}
           <Card>
             <CardHeader
-              title="Running vacuums"
+              title={t("vacuum.runningVacuums")}
               icon={<Trash2 size={15} />}
               action={
                 (data?.activeVacuums?.length ?? 0) > 0 ? (
                   <Badge variant="info" size="xs" dot>
-                    {data?.activeVacuums?.length} active
+                    {t("vacuum.activeCount", {
+                      count: data?.activeVacuums?.length ?? 0,
+                    })}
                   </Badge>
                 ) : null
               }
@@ -220,8 +234,8 @@ export default function VacuumPage() {
             {!data?.activeVacuums?.length ? (
               <EmptyState
                 icon={<Trash2 size={28} />}
-                title="No vacuums running"
-                message="Active VACUUM operations will appear here with live progress"
+                title={t("vacuum.noVacuums")}
+                message={t("vacuum.noVacuumsMessage")}
               />
             ) : (
               <div className="space-y-3">
@@ -237,7 +251,7 @@ export default function VacuumPage() {
                       <div className="flex gap-1.5">
                         {v.isAutovacuum && (
                           <Badge variant="info" size="xs">
-                            auto
+                            {t("vacuum.auto")}
                           </Badge>
                         )}
                         <Badge variant="default" size="xs">
@@ -253,8 +267,11 @@ export default function VacuumPage() {
                     <div className="flex justify-between mt-1 text-[10px] text-muted">
                       <span>PID {v.pid}</span>
                       <span>
-                        {v.progressPct.toFixed(1)}% · {v.heapBlksScanned}/
-                        {v.heapBlksTotal} blocks
+                        {v.progressPct.toFixed(1)}% ·{" "}
+                        {t("vacuum.blocks", {
+                          scanned: v.heapBlksScanned,
+                          total: v.heapBlksTotal,
+                        })}
                       </span>
                     </div>
                   </div>
@@ -263,11 +280,10 @@ export default function VacuumPage() {
             )}
           </Card>
 
-          {/* At-risk tables */}
           <Card>
             <CardHeader
-              title="Tables at wraparound risk"
-              subtitle="Sorted by XID age"
+              title={t("vacuum.atRiskTables")}
+              subtitle={t("vacuum.sortedByXidAge")}
               icon={
                 <AlertTriangle
                   size={15}
@@ -278,53 +294,53 @@ export default function VacuumPage() {
             {!data?.xidAgeRisk?.length ? (
               <EmptyState
                 icon={<Clock size={28} />}
-                title="No at-risk tables"
-                message="All tables are well within safe XID range"
+                title={t("vacuum.noAtRisk")}
+                message={t("vacuum.noAtRiskMessage")}
               />
             ) : (
               <DataTable
                 data={data.xidAgeRisk}
-                keyFn={(t) => `${t.schemaName}.${t.tableName}`}
+                keyFn={(r) => `${r.schemaName}.${r.tableName}`}
                 columns={[
                   {
                     key: "table",
-                    header: "Table",
-                    render: (t) => (
+                    header: t("vacuum.colTable"),
+                    render: (r) => (
                       <span className="mono text-xs text-primary">
-                        {t.schemaName}.{t.tableName}
+                        {r.schemaName}.{r.tableName}
                       </span>
                     ),
                   },
                   {
                     key: "age",
-                    header: "XID age",
+                    header: t("vacuum.colXidAge"),
                     width: "100px",
                     align: "right",
-                    render: (t) => (
+                    render: (r) => (
                       <span
-                        className={cn("text-xs font-bold", xidAgeColor(t.age))}
+                        className={cn("text-xs font-bold", xidAgeColor(r.age))}
                       >
-                        {fmtXidAge(t.age)}
+                        {fmtXidAge(r.age)}
                       </span>
                     ),
                   },
                   {
                     key: "status",
-                    header: "Status",
+                    header: t("vacuum.colStatus"),
                     width: "100px",
                     align: "right",
-                    render: (t) => (
+                    render: (r) => (
                       <span
                         className={cn(
                           "text-[10px] px-1.5 py-0.5 rounded-full border font-medium",
                           severityBadge(
-                            t.ageStatus === "emergency"
+                            r.ageStatus === "emergency"
                               ? "critical"
-                              : t.ageStatus,
+                              : r.ageStatus,
                           ),
                         )}
                       >
-                        {t.ageStatus}
+                        {t(AGE_STATUS_LABELS[r.ageStatus])}
                       </span>
                     ),
                   },

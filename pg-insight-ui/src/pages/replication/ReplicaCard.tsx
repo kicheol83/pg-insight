@@ -3,8 +3,10 @@ import { Badge } from "@/components/ui";
 import { fmtBytes, fmtMs, cn } from "@/lib/format";
 import { lagColor } from "@/lib/colors";
 import type { ReplicaInfo } from "@/types/model";
+import { useI18n } from "@/i18n";
 
 export function ReplicaCard({ replica }: { replica: ReplicaInfo }) {
+  const { t, locale } = useI18n();
   return (
     <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)]">
       <div className="flex items-center justify-between mb-3">
@@ -41,17 +43,17 @@ export function ReplicaCard({ replica }: { replica: ReplicaInfo }) {
       <div className="grid grid-cols-3 gap-2 mb-2">
         {[
           {
-            label: "Write lag",
+            label: t("replication.writeLag"),
             bytes: replica.writeLagBytes,
             ms: replica.writeLagMs,
           },
           {
-            label: "Flush lag",
+            label: t("replication.flushLag"),
             bytes: replica.flushLagBytes,
             ms: replica.flushLagMs,
           },
           {
-            label: "Replay lag",
+            label: t("replication.replayLag"),
             bytes: replica.replayLagBytes,
             ms: replica.replayLagMs,
           },
@@ -73,14 +75,16 @@ export function ReplicaCard({ replica }: { replica: ReplicaInfo }) {
 
       <div className="flex justify-between text-[10px] text-muted">
         <span>
-          Total lag:{" "}
+          {t("replication.totalLag")}{" "}
           <span className={cn("font-bold", lagColor(replica.totalLagBytes))}>
             {fmtBytes(replica.totalLagBytes)}
           </span>
         </span>
         {replica.replyTime && (
           <span>
-            Last reply: {new Date(replica.replyTime).toLocaleTimeString()}
+            {t("replication.lastReply", {
+              time: new Date(replica.replyTime).toLocaleTimeString(locale),
+            })}
           </span>
         )}
       </div>

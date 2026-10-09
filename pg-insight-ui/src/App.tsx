@@ -5,6 +5,7 @@ import { TargetHealthGate } from "@/components/layout/TargetHealthGate";
 import { AppProvider } from "@/store/app";
 import { ThemeProvider } from "@/store/theme";
 import { AuthProvider, useAuth } from "@/store/auth";
+import { I18nProvider } from "@/i18n";
 import { ToastProvider, Spinner } from "@/components/ui";
 import BackupsPage from "./pages/backup/BackupsPage";
 
@@ -48,93 +49,98 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <ToastProvider>
-        <AuthProvider>
-          <AppProvider>
-            <BrowserRouter>
-              <Suspense fallback={<PageLoader />}>
-                <Routes>
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route
-                    path="/*"
-                    element={
-                      <RequireAuth>
-                        <AppLayout>
-                          <TargetHealthGate>
-                            <Suspense fallback={<PageLoader />}>
-                              <Routes>
-                                <Route path="/" element={<DashboardPage />} />
-                                <Route
-                                  path="/targets"
-                                  element={<TargetsPage />}
-                                />
-                                <Route
-                                  path="/backups"
-                                  element={<BackupsPage />}
-                                />
-                                <Route
-                                  path="/database"
-                                  element={<DatabasePage />}
-                                />
-                                <Route
-                                  path="/connections"
-                                  element={<ConnectionsPage />}
-                                />
-                                <Route
-                                  path="/queries"
-                                  element={<QueriesPage />}
-                                />
-                                <Route path="/locks" element={<LocksPage />} />
-                                <Route
-                                  path="/tables"
-                                  element={<TablesPage />}
-                                />
-                                <Route
-                                  path="/io"
-                                  element={<IoMonitoringPage />}
-                                />
-                                <Route
-                                  path="/vacuum"
-                                  element={<VacuumPage />}
-                                />
-                                <Route
-                                  path="/job-progress"
-                                  element={<JobProgressPage />}
-                                />
-                                <Route
-                                  path="/replication"
-                                  element={<ReplicationPage />}
-                                />
-                                <Route
-                                  path="/alerts"
-                                  element={<AlertsPage />}
-                                />
-                                <Route
-                                  path="/settings"
-                                  element={<SettingsPage />}
-                                />
-                                <Route
-                                  path="/diagnostics"
-                                  element={<DiagnosticsPage />}
-                                />
-                                <Route
-                                  path="*"
-                                  element={<Navigate to="/" replace />}
-                                />
-                              </Routes>
-                            </Suspense>
-                          </TargetHealthGate>
-                        </AppLayout>
-                      </RequireAuth>
-                    }
-                  />
-                </Routes>
-              </Suspense>
-            </BrowserRouter>
-          </AppProvider>
-        </AuthProvider>
-      </ToastProvider>
-    </ThemeProvider>
+    <I18nProvider>
+      <ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <AppProvider>
+              <BrowserRouter>
+                <Suspense fallback={<PageLoader />}>
+                  <Routes>
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route
+                      path="/*"
+                      element={
+                        <RequireAuth>
+                          <AppLayout>
+                            <TargetHealthGate>
+                              <Suspense fallback={<PageLoader />}>
+                                <Routes>
+                                  <Route path="/" element={<DashboardPage />} />
+                                  <Route
+                                    path="/targets"
+                                    element={<TargetsPage />}
+                                  />
+                                  <Route
+                                    path="/backups"
+                                    element={<BackupsPage />}
+                                  />
+                                  <Route
+                                    path="/database"
+                                    element={<DatabasePage />}
+                                  />
+                                  <Route
+                                    path="/connections"
+                                    element={<ConnectionsPage />}
+                                  />
+                                  <Route
+                                    path="/queries"
+                                    element={<QueriesPage />}
+                                  />
+                                  <Route
+                                    path="/locks"
+                                    element={<LocksPage />}
+                                  />
+                                  <Route
+                                    path="/tables"
+                                    element={<TablesPage />}
+                                  />
+                                  <Route
+                                    path="/io"
+                                    element={<IoMonitoringPage />}
+                                  />
+                                  <Route
+                                    path="/vacuum"
+                                    element={<VacuumPage />}
+                                  />
+                                  <Route
+                                    path="/job-progress"
+                                    element={<JobProgressPage />}
+                                  />
+                                  <Route
+                                    path="/replication"
+                                    element={<ReplicationPage />}
+                                  />
+                                  <Route
+                                    path="/alerts"
+                                    element={<AlertsPage />}
+                                  />
+                                  <Route
+                                    path="/settings"
+                                    element={<SettingsPage />}
+                                  />
+                                  <Route
+                                    path="/diagnostics"
+                                    element={<DiagnosticsPage />}
+                                  />
+                                  <Route
+                                    path="*"
+                                    element={<Navigate to="/" replace />}
+                                  />
+                                </Routes>
+                              </Suspense>
+                            </TargetHealthGate>
+                          </AppLayout>
+                        </RequireAuth>
+                      }
+                    />
+                  </Routes>
+                </Suspense>
+              </BrowserRouter>
+            </AppProvider>
+          </AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
+    </I18nProvider>
   );
 }

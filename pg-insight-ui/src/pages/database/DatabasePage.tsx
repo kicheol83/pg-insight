@@ -25,9 +25,11 @@ import { useQuery } from "@/hooks/useQuery";
 import { useActiveTarget } from "@/store/app";
 import { liveApi } from "@/api/endpoints";
 import { fmtBytes, fmtNum, fmtMs, fmtRelative, cn } from "@/lib/format";
+import { useI18n } from "@/i18n";
 
 export default function DatabasePage() {
   const { activeTargetId } = useActiveTarget();
+  const { t, locale } = useI18n();
 
   const { data, loading, refetch, updatedAt } = useQuery(
     () => liveApi.databaseStats(activeTargetId ?? ""),
@@ -37,17 +39,14 @@ export default function DatabasePage() {
   if (!activeTargetId) {
     return (
       <>
-        <TopBar
-          title="Database"
-          subtitle="pg_stat_database — butun DB darajasidagi statistika"
-        />
+        <TopBar title={t("nav.database")} subtitle={t("database.subtitle")} />
         <PageContent>
           <div className="flex items-center gap-3 mb-5">
             <TargetSelector />
           </div>
           <EmptyState
             icon={<Database size={32} />}
-            title="Target tanlanmagan"
+            title={t("database.noTarget")}
           />
         </PageContent>
       </>
@@ -74,11 +73,9 @@ export default function DatabasePage() {
   return (
     <>
       <TopBar
-        title="Database"
+        title={t("nav.database")}
         subtitle={
-          updatedAt
-            ? `Yangilandi hozirgina`
-            : "pg_stat_database — butun DB darajasidagi statistika"
+          updatedAt ? t("database.updatedJustNow") : t("database.subtitle")
         }
         actions={
           <Button
@@ -88,7 +85,7 @@ export default function DatabasePage() {
             onClick={refetch}
             loading={loading}
           >
-            Yangilash
+            {t("common.refresh")}
           </Button>
         }
       />
@@ -97,7 +94,7 @@ export default function DatabasePage() {
           <TargetSelector />
           {!data?.trackIoTimingEnabled && (
             <Badge variant="warning" size="sm">
-              track_io_timing o'chirilgan — I/O vaqt o'lchamlari ko'rsatilmaydi
+              {t("database.trackIoTimingOff")}
             </Badge>
           )}
         </div>
@@ -106,7 +103,7 @@ export default function DatabasePage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
           <Card padding="sm">
             <div className="text-[10px] text-muted uppercase tracking-wide mb-1">
-              O'rtacha cache hit
+              {t("database.avgCacheHit")}
             </div>
             <div
               className={cn(
@@ -127,7 +124,7 @@ export default function DatabasePage() {
           </Card>
           <Card padding="sm">
             <div className="text-[10px] text-muted uppercase tracking-wide mb-1">
-              Deadlock'lar (jami)
+              {t("database.deadlocksTotal")}
             </div>
             <div
               className={cn(
@@ -140,7 +137,7 @@ export default function DatabasePage() {
           </Card>
           <Card padding="sm">
             <div className="text-[10px] text-muted uppercase tracking-wide mb-1">
-              Temp fayllar
+              {t("database.tempFiles")}
             </div>
             <div
               className={cn(
@@ -153,7 +150,7 @@ export default function DatabasePage() {
           </Card>
           <Card padding="sm">
             <div className="text-[10px] text-muted uppercase tracking-wide mb-1">
-              Temp hajmi
+              {t("database.tempSize")}
             </div>
             <div className="text-2xl font-bold tabular-nums text-primary">
               {fmtBytes(totalTempBytes)}
@@ -170,16 +167,14 @@ export default function DatabasePage() {
               />
               <div>
                 <p className="text-sm font-medium text-primary">
-                  Temp fayllar katta hajmni egallayapti
+                  {t("database.tempWarningTitle")}
                 </p>
                 <p className="text-xs text-secondary mt-1">
-                  Bu odatda{" "}
+                  {t("database.tempWarningBefore")}{" "}
                   <code className="mono text-brand-500">work_mem</code>{" "}
-                  sozlamasi RAM'da sig'maydigan sort yoki hash operatsiyalari
-                  uchun yetarli emasligini bildiradi.{" "}
-                  <code className="mono text-brand-500">work_mem</code>ni
-                  oshirishni yoki og'ir so'rovlarni optimallashtirishni ko'rib
-                  chiqing.
+                  {t("database.tempWarningMiddle")}{" "}
+                  <code className="mono text-brand-500">work_mem</code>
+                  {t("database.tempWarningAfter")}
                 </p>
               </div>
             </div>
@@ -195,12 +190,14 @@ export default function DatabasePage() {
                 icon={<Database size={15} />}
                 subtitle={
                   db.statsReset
-                    ? `Statistika ${fmtRelative(db.statsReset)} dan beri`
+                    ? t("database.statsReset", {
+                        time: fmtRelative(db.statsReset, locale),
+                      })
                     : undefined
                 }
                 action={
                   <Badge variant="default" size="xs">
-                    {db.numBackends} ulanish
+                    {t("database.backends", { count: db.numBackends })}
                   </Badge>
                 }
               />
@@ -208,7 +205,7 @@ export default function DatabasePage() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                 <div>
                   <div className="text-[10px] text-muted mb-1">
-                    Cache hit ratio
+                    {t("database.cacheHitRatio")}
                   </div>
                   <div
                     className={cn(
@@ -243,7 +240,9 @@ export default function DatabasePage() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-muted mb-1">Deadlocks</div>
+                  <div className="text-[10px] text-muted mb-1">
+                    {t("database.deadlocks")}
+                  </div>
                   <div
                     className={cn(
                       "text-lg font-bold tabular-nums",
@@ -255,7 +254,7 @@ export default function DatabasePage() {
                 </div>
                 <div>
                   <div className="text-[10px] text-muted mb-1">
-                    Conflicts (replica)
+                    {t("database.conflicts")}
                   </div>
                   <div
                     className={cn(
@@ -271,7 +270,7 @@ export default function DatabasePage() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-4 border-t border-[var(--border)]">
                 <div className="p-2.5 bg-[var(--bg-subtle)] rounded-lg">
                   <div className="text-[10px] text-muted mb-1">
-                    Tuple qaytarilgan / olingan
+                    {t("database.tuplesReturnedFetched")}
                   </div>
                   <div className="text-xs font-medium text-primary">
                     {fmtNum(db.tupReturned)} / {fmtNum(db.tupFetched)}
@@ -288,7 +287,7 @@ export default function DatabasePage() {
                 </div>
                 <div className="p-2.5 bg-[var(--bg-subtle)] rounded-lg">
                   <div className="text-[10px] text-muted mb-1">
-                    Temp fayl / hajm
+                    {t("database.tempFilesSize")}
                   </div>
                   <div className="text-xs font-medium text-primary">
                     {fmtNum(db.tempFiles)} / {fmtBytes(db.tempBytes)}
@@ -296,7 +295,7 @@ export default function DatabasePage() {
                 </div>
                 <div className="p-2.5 bg-[var(--bg-subtle)] rounded-lg">
                   <div className="text-[10px] text-muted mb-1">
-                    Checksum xatolari
+                    {t("database.checksumFailures")}
                   </div>
                   <div
                     className={cn(
@@ -313,13 +312,13 @@ export default function DatabasePage() {
                 (db.blkReadTimeMs > 0 || db.blkWriteTimeMs > 0) && (
                   <div className="flex gap-4 pt-3 mt-3 border-t border-[var(--border)] text-xs text-muted">
                     <span className="flex items-center gap-1">
-                      <Clock size={11} /> O'qish vaqti:{" "}
+                      <Clock size={11} /> {t("database.readTime")}{" "}
                       <span className="text-primary font-medium">
                         {fmtMs(db.blkReadTimeMs)}
                       </span>
                     </span>
                     <span className="flex items-center gap-1">
-                      <Clock size={11} /> Yozish vaqti:{" "}
+                      <Clock size={11} /> {t("database.writeTime")}{" "}
                       <span className="text-primary font-medium">
                         {fmtMs(db.blkWriteTimeMs)}
                       </span>
@@ -332,7 +331,7 @@ export default function DatabasePage() {
             <Card>
               <EmptyState
                 icon={<Database size={28} />}
-                title="Database topilmadi"
+                title={t("database.noDatabases")}
               />
             </Card>
           )}

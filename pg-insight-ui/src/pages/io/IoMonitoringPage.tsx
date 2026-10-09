@@ -23,19 +23,21 @@ import { useActiveTarget } from "@/store/app";
 import { liveApi } from "@/api/endpoints";
 import { fmtNum, fmtMs, cn } from "@/lib/format";
 import type { IoStatRow } from "@/types/model";
+import { useI18n, type MessageKey } from "@/i18n";
 
-const BACKEND_LABELS: Record<string, string> = {
-  "client backend": "Mijoz ulanishi",
-  "autovacuum worker": "Autovacuum",
-  "autovacuum launcher": "Autovacuum launcher",
-  "background writer": "Background writer",
-  checkpointer: "Checkpointer",
-  walwriter: "WAL writer",
-  "standalone backend": "Standalone (VACUUM)",
+const BACKEND_LABELS: Record<string, MessageKey> = {
+  "client backend": "io.backend.clientBackend",
+  "autovacuum worker": "io.backend.autovacuumWorker",
+  "autovacuum launcher": "io.backend.autovacuumLauncher",
+  "background writer": "io.backend.backgroundWriter",
+  checkpointer: "io.backend.checkpointer",
+  walwriter: "io.backend.walWriter",
+  "standalone backend": "io.backend.standalone",
 };
 
 export default function IoMonitoringPage() {
   const { activeTargetId } = useActiveTarget();
+  const { t } = useI18n();
 
   const { data, loading, refetch, updatedAt } = useQuery(
     () => liveApi.ioStats(activeTargetId ?? ""),
@@ -45,15 +47,12 @@ export default function IoMonitoringPage() {
   if (!activeTargetId) {
     return (
       <>
-        <TopBar title="I/O" subtitle="Disk operatsiyalari — pg_stat_io" />
+        <TopBar title={t("nav.io")} subtitle={t("io.subtitle")} />
         <PageContent>
           <div className="flex items-center gap-3 mb-5">
             <TargetSelector />
           </div>
-          <EmptyState
-            icon={<HardDrive size={32} />}
-            title="Target tanlanmagan"
-          />
+          <EmptyState icon={<HardDrive size={32} />} title={t("io.noTarget")} />
         </PageContent>
       </>
     );
@@ -67,12 +66,8 @@ export default function IoMonitoringPage() {
   return (
     <>
       <TopBar
-        title="I/O"
-        subtitle={
-          updatedAt
-            ? "Yangilandi hozirgina"
-            : "Disk operatsiyalari — pg_stat_io"
-        }
+        title={t("nav.io")}
+        subtitle={updatedAt ? t("io.updatedJustNow") : t("io.subtitle")}
         actions={
           <Button
             size="sm"
@@ -81,7 +76,7 @@ export default function IoMonitoringPage() {
             onClick={refetch}
             loading={loading}
           >
-            Yangilash
+            {t("common.refresh")}
           </Button>
         }
       />
@@ -94,13 +89,13 @@ export default function IoMonitoringPage() {
               size="sm"
             >
               {data.pgStatIoAvailable
-                ? "pg_stat_io (to'liq)"
-                : "Soddalashtirilgan ko'rinish"}
+                ? t("io.pgStatIoFull")
+                : t("io.simplifiedView")}
             </Badge>
           )}
           {data && !data.trackIoTimingEnabled && (
             <Badge variant="warning" size="xs">
-              track_io_timing o'chirilgan
+              {t("io.trackIoTimingOff")}
             </Badge>
           )}
         </div>
@@ -111,18 +106,16 @@ export default function IoMonitoringPage() {
               <Info size={16} className="text-blue-400 mt-0.5 shrink-0" />
               <div>
                 <p className="text-sm font-medium text-primary">
-                  Bu server PostgreSQL 16'dan eski — batafsil{" "}
-                  <code className="mono text-brand-500">pg_stat_io</code> mavjud
-                  emas
+                  {t("io.oldServerBefore")}{" "}
+                  <code className="mono text-brand-500">pg_stat_io</code>{" "}
+                  {t("io.oldServerAfter")}
                 </p>
                 <p className="text-xs text-secondary mt-1">
-                  Quyida{" "}
+                  {t("io.fallbackBefore")}{" "}
                   <code className="mono text-brand-500">
                     pg_statio_user_tables
                   </code>{" "}
-                  asosidagi soddalashtirilgan ko'rinish ko'rsatilmoqda — backend
-                  turi bo'yicha ajratilmagan, faqat jadval/indeks cache
-                  statistikasi. Batafsil ko'rish uchun PostgreSQL 16+ ga o'ting.
+                  {t("io.fallbackAfter")}
                 </p>
               </div>
             </div>
@@ -134,14 +127,14 @@ export default function IoMonitoringPage() {
             {/* Backend turi bo'yicha xulosa */}
             <Card className="mb-5">
               <CardHeader
-                title="Backend turi bo'yicha I/O yuki"
-                subtitle="Kim disk'ni ko'proq band qilyapti"
+                title={t("io.byBackendTitle")}
+                subtitle={t("io.byBackendSubtitle")}
                 icon={<HardDrive size={15} />}
               />
               {!data.byBackendType?.length ? (
                 <EmptyState
-                  title="I/O faoliyati topilmadi"
-                  message="Hozircha hech qanday disk operatsiyasi qayd etilmagan"
+                  title={t("io.noActivity")}
+                  message={t("io.noActivityMessage")}
                 />
               ) : (
                 <div className="space-y-2.5">
@@ -151,7 +144,9 @@ export default function IoMonitoringPage() {
                       className="flex items-center gap-3"
                     >
                       <div className="text-xs text-secondary w-40 shrink-0 truncate">
-                        {BACKEND_LABELS[b.backendType] ?? b.backendType}
+                        {BACKEND_LABELS[b.backendType]
+                          ? t(BACKEND_LABELS[b.backendType])
+                          : b.backendType}
                       </div>
                       <div className="flex-1">
                         <ProgressBar
@@ -180,8 +175,8 @@ export default function IoMonitoringPage() {
             {/* Batafsil jadval */}
             <Card>
               <CardHeader
-                title="Batafsil I/O jadvali"
-                subtitle="Backend, obyekt va kontekst bo'yicha"
+                title={t("io.detailTitle")}
+                subtitle={t("io.detailSubtitle")}
                 icon={<HardDrive size={15} />}
               />
               <DataTable<IoStatRow>
@@ -190,20 +185,22 @@ export default function IoMonitoringPage() {
                 keyFn={(r, i) =>
                   `${r.backendType}-${r.object}-${r.context}-${i}`
                 }
-                emptyMsg="I/O faoliyati topilmadi"
+                emptyMsg={t("io.noActivity")}
                 columns={[
                   {
                     key: "backend",
-                    header: "Backend",
+                    header: t("io.colBackend"),
                     render: (r) => (
                       <span className="text-xs text-primary">
-                        {BACKEND_LABELS[r.backendType] ?? r.backendType}
+                        {BACKEND_LABELS[r.backendType]
+                          ? t(BACKEND_LABELS[r.backendType])
+                          : r.backendType}
                       </span>
                     ),
                   },
                   {
                     key: "object",
-                    header: "Obyekt",
+                    header: t("io.colObject"),
                     width: "110px",
                     render: (r) => (
                       <span className="text-xs text-secondary">{r.object}</span>
@@ -211,7 +208,7 @@ export default function IoMonitoringPage() {
                   },
                   {
                     key: "context",
-                    header: "Kontekst",
+                    header: t("io.colContext"),
                     width: "100px",
                     render: (r) => (
                       <Badge variant="default" size="xs">
@@ -221,7 +218,7 @@ export default function IoMonitoringPage() {
                   },
                   {
                     key: "reads",
-                    header: "Reads",
+                    header: t("io.colReads"),
                     width: "80px",
                     align: "right",
                     render: (r) => (
@@ -232,7 +229,7 @@ export default function IoMonitoringPage() {
                   },
                   {
                     key: "writes",
-                    header: "Writes",
+                    header: t("io.colWrites"),
                     width: "80px",
                     align: "right",
                     render: (r) => (
@@ -243,7 +240,7 @@ export default function IoMonitoringPage() {
                   },
                   {
                     key: "extends",
-                    header: "Extends",
+                    header: t("io.colExtends"),
                     width: "80px",
                     align: "right",
                     render: (r) => (
@@ -254,7 +251,7 @@ export default function IoMonitoringPage() {
                   },
                   {
                     key: "hits",
-                    header: "Hits",
+                    header: t("io.colHits"),
                     width: "80px",
                     align: "right",
                     render: (r) => (
@@ -265,7 +262,7 @@ export default function IoMonitoringPage() {
                   },
                   {
                     key: "evictions",
-                    header: "Evictions",
+                    header: t("io.colEvictions"),
                     width: "90px",
                     align: "right",
                     render: (r) => (
@@ -283,7 +280,7 @@ export default function IoMonitoringPage() {
                   },
                   {
                     key: "time",
-                    header: "Vaqt (o'qish/yozish)",
+                    header: t("io.colTime"),
                     width: "130px",
                     align: "right",
                     render: (r) =>
@@ -302,40 +299,46 @@ export default function IoMonitoringPage() {
         ) : (
           <Card>
             <CardHeader
-              title="Jadval/indeks cache statistikasi"
+              title={t("io.fallbackTitle")}
               icon={<Maximize2 size={15} />}
             />
             {!data?.fallback ? (
-              <EmptyState title="Ma'lumot yo'q" />
+              <EmptyState title={t("common.noData")} />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-4 bg-[var(--bg-subtle)] rounded-lg">
-                  <div className="text-xs text-muted mb-2">
-                    Heap (jadval ma'lumoti)
-                  </div>
+                  <div className="text-xs text-muted mb-2">{t("io.heap")}</div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-secondary">O'qilgan (disk'dan)</span>
+                    <span className="text-secondary">
+                      {t("io.readFromDisk")}
+                    </span>
                     <span className="text-primary font-medium">
                       {fmtNum(data.fallback.heapBlksRead)}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm mt-1">
-                    <span className="text-secondary">Hit (cache'dan)</span>
+                    <span className="text-secondary">
+                      {t("io.hitFromCache")}
+                    </span>
                     <span className="text-green-400 font-medium">
                       {fmtNum(data.fallback.heapBlksHit)}
                     </span>
                   </div>
                 </div>
                 <div className="p-4 bg-[var(--bg-subtle)] rounded-lg">
-                  <div className="text-xs text-muted mb-2">Index</div>
+                  <div className="text-xs text-muted mb-2">{t("io.index")}</div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-secondary">O'qilgan (disk'dan)</span>
+                    <span className="text-secondary">
+                      {t("io.readFromDisk")}
+                    </span>
                     <span className="text-primary font-medium">
                       {fmtNum(data.fallback.idxBlksRead)}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm mt-1">
-                    <span className="text-secondary">Hit (cache'dan)</span>
+                    <span className="text-secondary">
+                      {t("io.hitFromCache")}
+                    </span>
                     <span className="text-green-400 font-medium">
                       {fmtNum(data.fallback.idxBlksHit)}
                     </span>
@@ -343,7 +346,7 @@ export default function IoMonitoringPage() {
                 </div>
                 <div className="sm:col-span-2">
                   <div className="text-xs text-muted mb-1.5">
-                    Umumiy cache hit ratio
+                    {t("io.overallCacheHit")}
                   </div>
                   <div className="flex items-center gap-3">
                     <span

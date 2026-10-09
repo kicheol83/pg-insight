@@ -21,23 +21,29 @@ import {
 import { cn } from "@/lib/format";
 import { useAppStore } from "@/store/app";
 import { LiveDot, Badge } from "@/components/ui";
+import { useI18n, type MessageKey } from "@/i18n";
 
-const NAV_ITEMS = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard", exact: true },
-  { to: "/targets", icon: Database, label: "Targets" },
-  { to: "/backups", icon: HardDriveDownload, label: "Backups" },
-  { to: "/database", icon: Server, label: "Database" },
-  { to: "/connections", icon: Wifi, label: "Connections" },
-  { to: "/queries", icon: Zap, label: "Queries" },
-  { to: "/locks", icon: Lock, label: "Locks" },
-  { to: "/tables", icon: Activity, label: "Tables & Indexes" },
-  { to: "/io", icon: HardDrive, label: "I/O" },
-  { to: "/vacuum", icon: Trash2, label: "Vacuum" },
-  { to: "/job-progress", icon: ListChecks, label: "Job Progress" },
-  { to: "/replication", icon: GitBranch, label: "Replication" },
-  { to: "/alerts", icon: Bell, label: "Alerts" },
-  { to: "/settings", icon: Settings, label: "Settings" },
-  { to: "/diagnostics", icon: Stethoscope, label: "Diagnostics" },
+const NAV_ITEMS: Array<{
+  to: string;
+  icon: typeof LayoutDashboard;
+  label: MessageKey;
+  exact?: boolean;
+}> = [
+  { to: "/", icon: LayoutDashboard, label: "nav.dashboard", exact: true },
+  { to: "/targets", icon: Database, label: "nav.targets" },
+  { to: "/backups", icon: HardDriveDownload, label: "nav.backups" },
+  { to: "/database", icon: Server, label: "nav.database" },
+  { to: "/connections", icon: Wifi, label: "nav.connections" },
+  { to: "/queries", icon: Zap, label: "nav.queries" },
+  { to: "/locks", icon: Lock, label: "nav.locks" },
+  { to: "/tables", icon: Activity, label: "nav.tables" },
+  { to: "/io", icon: HardDrive, label: "nav.io" },
+  { to: "/vacuum", icon: Trash2, label: "nav.vacuum" },
+  { to: "/job-progress", icon: ListChecks, label: "nav.jobProgress" },
+  { to: "/replication", icon: GitBranch, label: "nav.replication" },
+  { to: "/alerts", icon: Bell, label: "nav.alerts" },
+  { to: "/settings", icon: Settings, label: "nav.settings" },
+  { to: "/diagnostics", icon: Stethoscope, label: "nav.diagnostics" },
 ];
 
 interface SidebarProps {
@@ -48,6 +54,7 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { state } = useAppStore();
   const location = useLocation();
+  const { t } = useI18n();
 
   return (
     <aside
@@ -73,7 +80,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               PG Insight
             </div>
             <div className="text-[10px] text-muted leading-none mt-0.5">
-              PostgreSQL Monitor
+              {t("layout.tagline")}
             </div>
           </div>
         )}
@@ -83,7 +90,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <div className="px-4 py-2.5 border-b border-[var(--border)] flex items-center gap-2">
           <LiveDot active={state.wsStatus === "connected"} size="xs" />
           <span className="text-[11px] text-muted">
-            {state.wsStatus === "connected" ? "Live" : "Connecting…"}
+            {state.wsStatus === "connected"
+              ? t("layout.live")
+              : t("layout.connecting")}
           </span>
         </div>
       )}
@@ -97,7 +106,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             <NavLink
               key={item.to}
               to={item.to}
-              title={collapsed ? item.label : undefined}
+              title={collapsed ? t(item.label) : undefined}
               className={cn(
                 "flex items-center rounded-lg transition-colors mb-0.5",
                 collapsed
@@ -111,11 +120,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               <item.icon size={16} className="shrink-0" />
               {!collapsed && (
                 <span className="text-sm font-medium truncate">
-                  {item.label}
+                  {t(item.label)}
                 </span>
               )}
               {!collapsed &&
-                item.label === "Alerts" &&
+                item.label === "nav.alerts" &&
                 state.activeAlertsCount > 0 && (
                   <Badge variant="error" size="xs" className="ml-auto">
                     {state.activeAlertsCount}
@@ -134,6 +143,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       >
         <button
           onClick={onToggle}
+          title={collapsed ? t("layout.expand") : t("layout.collapse")}
+          aria-label={collapsed ? t("layout.expand") : t("layout.collapse")}
           className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-[var(--bg-hover)] transition-colors"
         >
           {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
