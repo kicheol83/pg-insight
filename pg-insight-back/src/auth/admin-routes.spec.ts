@@ -44,6 +44,7 @@ const OPEN_WITHOUT_TARGET = new Set([
   'AuthController.refresh',
   'AuthController.logout',
   'AuthController.registerFirst',
+  'AuthController.signup',
   'TargetsController.create',
   'TargetsController.testConnection',
 ]);

@@ -58,6 +58,7 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required}
       TARGET_ALLOW_PRIVATE_HOSTS: ${TARGET_ALLOW_PRIVATE_HOSTS:-false}
       TARGET_QUOTA_PER_USER: ${TARGET_QUOTA_PER_USER:-3}
+      SIGNUP_ENABLED: ${SIGNUP_ENABLED:-false}
       BACKUP_DIR: /app/backups
       PORT: 3000
       NODE_ENV: production

@@ -8,6 +8,7 @@ interface AuthState {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   registerFirst: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -39,6 +40,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const signup = useCallback(async (email: string, password: string) => {
+    setLoading(true);
+    try {
+      const res = await authApi.signup(email, password);
+      setToken(res.accessToken);
+      setUser(res.user);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const logout = useCallback(() => {
     clearToken();
     setUser(null);
@@ -52,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         login,
         registerFirst,
+        signup,
         logout,
       }}
     >

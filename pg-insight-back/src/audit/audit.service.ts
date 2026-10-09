@@ -5,6 +5,7 @@ export type AuditAction =
   | 'login'
   | 'login_failed'
   | 'register_first'
+  | 'signup'
   | 'register'
   | 'target.create'
   | 'target.delete'

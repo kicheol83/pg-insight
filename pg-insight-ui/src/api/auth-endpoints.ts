@@ -14,4 +14,10 @@ export const authApi = {
     http
       .post<AuthResponse>("/auth/register-first", { email, password })
       .then((r) => r.data),
+  signup: (email: string, password: string) =>
+    http
+      .post<AuthResponse>("/auth/signup", { email, password })
+      .then((r) => r.data),
+  config: () =>
+    http.get<{ signupEnabled: boolean }>("/auth/config").then((r) => r.data),
 };
