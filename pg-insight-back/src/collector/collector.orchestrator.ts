@@ -67,6 +67,8 @@ export class CollectorOrchestrator implements OnModuleInit, OnModuleDestroy {
 
   private readonly errorStates = new Map<string, TargetErrorState>();
 
+  private readonly reconnectTimers = new Map<string, NodeJS.Timeout>();
+
   private readonly intervals: CollectionIntervals;
 
   constructor(
@@ -238,6 +240,10 @@ export class CollectorOrchestrator implements OnModuleInit, OnModuleDestroy {
     this.targetIntervals.delete(targetId);
     this.errorStates.delete(targetId);
 
+    const reconnectTimer = this.reconnectTimers.get(targetId);
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    this.reconnectTimers.delete(targetId);
+
     this.logger.log(
       `Collection stopped for target: ${targetId.slice(0, 8)}`,
     );
@@ -283,6 +289,12 @@ export class CollectorOrchestrator implements OnModuleInit, OnModuleDestroy {
       errorState.consecutiveErrors++;
       errorState.lastErrorAt = new Date();
 
+      this.logger.warn(
+        `Target ${targetId.slice(0, 8)} collection error ` +
+          `${errorState.consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}: ` +
+          `${(error as Error).message}`,
+      );
+
       if (errorState.consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
         errorState.retryAt = new Date(Date.now() + RETRY_DELAY_MS);
 
@@ -298,21 +310,17 @@ export class CollectorOrchestrator implements OnModuleInit, OnModuleDestroy {
   }
 
   private scheduleReconnect(targetId: string): void {
-    setTimeout(async () => {
+    if (this.reconnectTimers.has(targetId)) return;
+
+    const timer = setTimeout(async () => {
+      this.reconnectTimers.delete(targetId);
+      if (!this.targetIntervals.has(targetId)) return;
+
       this.logger.log(
         `🔌 Attempting reconnect for target: ${targetId.slice(0, 8)}`,
       );
       try {
-        const entry = this.poolManager.getEntry(targetId);
-        if (!entry) return;
-
-        await this.poolManager.createPool(targetId, {
-          host: entry.host,
-          port: entry.port,
-          database: entry.database,
-          user: entry.username,
-          password: '', 
-        });
+        await this.poolManager.reconnect(targetId);
 
         const errorState = this.errorStates.get(targetId);
         if (errorState) {
@@ -325,6 +333,8 @@ export class CollectorOrchestrator implements OnModuleInit, OnModuleDestroy {
         );
       }
     }, RETRY_DELAY_MS);
+
+    this.reconnectTimers.set(targetId, timer);
   }
 
 
