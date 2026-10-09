@@ -95,6 +95,12 @@ describe('TargetAccessGuard', () => {
     ).resolves.toBe(true);
   });
 
+  it('answers the platform admin with 404 for a target that does not exist', async () => {
+    await expect(
+      run('byTargetId', { targetId: 'nope' }, ADMIN),
+    ).rejects.toThrow(NotFoundException);
+  });
+
   it('checks a target addressed through a declared :id parameter', async () => {
     await expect(
       run('byTargetIdParam', { id: 'bob-db' }, ALICE),

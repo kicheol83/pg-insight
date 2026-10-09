@@ -141,7 +141,7 @@ export class AuthService {
   public async register(
     email: string,
     password: string,
-    role: 'admin' | 'viewer' = 'viewer',
+    role: 'admin' | 'user' = 'user',
     actorUserId?: string,
   ) {
     const existing = await this.userModel.findUnique({ where: { email } });

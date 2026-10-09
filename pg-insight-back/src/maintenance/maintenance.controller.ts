@@ -1,5 +1,4 @@
-import { Controller, Post, Delete, Param, Body, UseGuards } from '@nestjs/common';
-import { AdminGuard } from '../auth/admin.guard';
+import { Controller, Post, Delete, Param, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, Matches } from 'class-validator';
 import { MaintenanceService } from './maintenance.service';
@@ -44,7 +43,6 @@ export class IndexTargetDto {
 export class MaintenanceController {
   constructor(private readonly maintenanceService: MaintenanceService) {}
 
-  @UseGuards(AdminGuard)
   @Post('vacuum')
   @ApiOperation({
     summary: 'Run VACUUM (ANALYZE) on a table',
@@ -66,7 +64,6 @@ export class MaintenanceController {
     );
   }
 
-  @UseGuards(AdminGuard)
   @Delete('index')
   @ApiOperation({
     summary: 'Drop an unused index (CONCURRENTLY)',

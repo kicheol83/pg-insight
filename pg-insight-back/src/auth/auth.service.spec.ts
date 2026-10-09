@@ -227,23 +227,23 @@ describe('AuthService', () => {
       userModel.findUnique.mockResolvedValue(null);
       userModel.create.mockResolvedValue({
         id: 'user-2',
-        email: 'viewer@example.com',
+        email: 'user@example.com',
         passwordHash: 'x',
-        role: 'viewer',
+        role: 'user',
       });
 
       const result = await service.register(
-        'viewer@example.com',
+        'user@example.com',
         'password123',
-        'viewer',
+        'user',
       );
-      expect(result.user.role).toBe('viewer');
+      expect(result.user.role).toBe('user');
     });
 
     it('rejects when the email is already taken', async () => {
       userModel.findUnique.mockResolvedValue({ id: 'existing' });
       await expect(
-        service.register('viewer@example.com', 'password123', 'viewer'),
+        service.register('user@example.com', 'password123', 'user'),
       ).rejects.toThrow(ConflictException);
     });
   });

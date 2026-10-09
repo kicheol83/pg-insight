@@ -10,9 +10,7 @@ import {
   ParseIntPipe,
   HttpCode,
   HttpStatus,
-  UseGuards,
 } from '@nestjs/common';
-import { AdminGuard } from '../auth/admin.guard';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, MaxLength } from 'class-validator';
 import { LiveQueryService } from './live-query.service';
@@ -82,7 +80,7 @@ export class LiveController {
   @Post('queries/explain')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'EXPLAIN a SELECT query; admins get ANALYZE, BUFFERS',
+    summary: 'EXPLAIN (ANALYZE, BUFFERS) a SELECT query on an owned target',
   })
   async explain(
     @Param('targetId') targetId: string,
@@ -91,11 +89,7 @@ export class LiveController {
     @Req() req: { ip?: string },
   ) {
     try {
-      const result = await this.liveQuery.explainQuery(
-        targetId,
-        dto.sql,
-        user.role === 'admin',
-      );
+      const result = await this.liveQuery.explainQuery(targetId, dto.sql, true);
       await this.audit.record({
         action: 'query.explain',
         userId: user.id,
@@ -118,7 +112,6 @@ export class LiveController {
     }
   }
 
-  @UseGuards(AdminGuard)
   @Delete('queries/:pid/cancel')
   @ApiOperation({ summary: 'Cancel a running query by PID' })
   async cancelQuery(
