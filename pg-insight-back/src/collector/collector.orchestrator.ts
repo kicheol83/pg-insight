@@ -1,7 +1,7 @@
 import {
   Injectable,
   Logger,
-  OnModuleInit,
+  OnApplicationBootstrap,
   OnModuleDestroy,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -60,7 +60,9 @@ const DEFAULT_INTERVALS: CollectionIntervals = {
 const MAX_CONSECUTIVE_ERRORS = 3;
 const RETRY_DELAY_MS = 30_000; 
 @Injectable()
-export class CollectorOrchestrator implements OnModuleInit, OnModuleDestroy {
+export class CollectorOrchestrator
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
   private readonly logger = new Logger(CollectorOrchestrator.name);
 
   private readonly targetIntervals = new Map<string, TargetIntervals>();
@@ -106,7 +108,7 @@ export class CollectorOrchestrator implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async onModuleInit(): Promise<void> {
+  async onApplicationBootstrap(): Promise<void> {
     this.logger.log('🎬 CollectorOrchestrator starting...');
 
     
