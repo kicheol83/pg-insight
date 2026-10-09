@@ -1,9 +1,11 @@
-import { Controller, Post, Body, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Req } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import {
   IsEmail,
   IsString,
   MinLength,
+  MaxLength,
   IsOptional,
   IsIn,
 } from 'class-validator';
@@ -35,6 +37,16 @@ export class RegisterDto {
   role?: 'admin' | 'user';
 }
 
+export class SignupDto {
+  @IsEmail()
+  email!: string;
+
+  @IsString()
+  @MinLength(8)
+  @MaxLength(72)
+  password!: string;
+}
+
 export class RefreshDto {
   @IsString()
   @IsString()
@@ -47,6 +59,24 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @Get('config')
+  @ApiOperation({
+    summary: 'Public authentication settings for the login page',
+  })
+  config() {
+    return { signupEnabled: this.authService.signupEnabled() };
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @Post('signup')
+  @ApiOperation({ summary: 'Create a regular user account' })
+  async signup(@Body() dto: SignupDto, @Req() req: { ip?: string }) {
+    return this.authService.signup(dto.email, dto.password, req.ip);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('login')
   @ApiOperation({
     summary: 'Log in and receive an access + refresh token pair',

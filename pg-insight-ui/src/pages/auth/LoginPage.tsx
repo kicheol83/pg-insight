@@ -1,18 +1,27 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Database, Lock, Mail } from "lucide-react";
 import { Card, Input, Button, useToast } from "@/components/ui";
 import { useAuth } from "@/store/auth";
+import { authApi } from "@/api/auth-endpoints";
 
 export default function LoginPage() {
-  const { login, registerFirst } = useAuth();
+  const { login, registerFirst, signup } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
 
-  const [mode, setMode] = useState<"login" | "setup">("login");
+  const [mode, setMode] = useState<"login" | "setup" | "signup">("login");
+  const [signupEnabled, setSignupEnabled] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    authApi
+      .config()
+      .then((c) => setSignupEnabled(c.signupEnabled))
+      .catch(() => setSignupEnabled(false));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,6 +29,8 @@ export default function LoginPage() {
     try {
       if (mode === "login") {
         await login(email, password);
+      } else if (mode === "signup") {
+        await signup(email, password);
       } else {
         await registerFirst(email, password);
       }
@@ -27,7 +38,7 @@ export default function LoginPage() {
     } catch (err) {
       const message = (err as Error).message;
 
-      if (mode === "login") {
+      if (mode === "login" && !signupEnabled) {
         toast({
           type: "info",
           title: "Kira olmadingizmi?",
@@ -64,7 +75,11 @@ export default function LoginPage() {
         <Card padding="lg">
           <form onSubmit={handleSubmit} className="space-y-4">
             <h2 className="text-sm font-semibold text-primary">
-              {mode === "login" ? "Kirish" : "Birinchi admin yaratish"}
+              {mode === "login"
+                ? "Kirish"
+                : mode === "signup"
+                  ? "Hisob yaratish"
+                  : "Birinchi admin yaratish"}
             </h2>
 
             <Input
@@ -82,20 +97,36 @@ export default function LoginPage() {
               icon={<Lock size={14} />}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={mode === "setup" ? "Kamida 8 belgi" : "••••••••"}
-              minLength={mode === "setup" ? 8 : undefined}
+              placeholder={mode === "login" ? "••••••••" : "Kamida 8 belgi"}
+              minLength={mode === "login" ? undefined : 8}
+              maxLength={mode === "login" ? undefined : 72}
               required
             />
 
             <Button type="submit" variant="primary" fullWidth loading={loading}>
-              {mode === "login" ? "Kirish" : "Admin yaratish"}
+              {mode === "login"
+                ? "Kirish"
+                : mode === "signup"
+                  ? "Hisob yaratish"
+                  : "Admin yaratish"}
             </Button>
+
+            {signupEnabled && mode === "login" && (
+              <button
+                type="button"
+                onClick={() => setMode("signup")}
+                className="w-full text-xs text-muted hover:text-brand-500 transition-colors text-center"
+              >
+                Hisobingiz yo'qmi? Ro'yxatdan o'ting
+              </button>
+            )}
 
             <button
               type="button"
               onClick={() =>
                 setMode((m) => (m === "login" ? "setup" : "login"))
               }
+              hidden={signupEnabled && mode === "login"}
               className="w-full text-xs text-muted hover:text-brand-500 transition-colors text-center"
             >
               {mode === "login"

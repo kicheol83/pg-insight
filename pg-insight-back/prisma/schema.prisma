@@ -10,7 +10,7 @@ model User {
   id           String   @id @default(uuid())
   email        String   @unique
   passwordHash String
-  role         String   @default("admin") // admin | viewer
+  role         String   @default("user") // admin | user
   createdAt    DateTime @default(now())
   lastLoginAt  DateTime?
 

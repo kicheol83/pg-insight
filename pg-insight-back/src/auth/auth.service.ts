@@ -4,6 +4,7 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes, createHash } from 'crypto';
@@ -25,6 +26,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly audit: AuditService,
+    private readonly config: ConfigService,
   ) {}
 
   private get userModel() {
@@ -134,6 +136,28 @@ export class AuthService {
       action: 'register_first',
       userId: result.user.id,
       userEmail: email,
+    });
+    return result;
+  }
+
+  public signupEnabled(): boolean {
+    return this.config.get<string>('SIGNUP_ENABLED') === 'true';
+  }
+
+  public async signup(email: string, password: string, ipAddress?: string) {
+    if (!this.signupEnabled()) {
+      throw new ForbiddenException('Sign-up is disabled on this instance');
+    }
+    const existing = await this.userModel.findUnique({ where: { email } });
+    if (existing) {
+      throw new ConflictException('A user with this email already exists');
+    }
+    const result = await this.createUser(email, password, 'user');
+    await this.audit.record({
+      action: 'signup',
+      userId: result.user.id,
+      userEmail: email,
+      ipAddress,
     });
     return result;
   }

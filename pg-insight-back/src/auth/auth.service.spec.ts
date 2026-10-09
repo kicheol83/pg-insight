@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
   UnauthorizedException,
@@ -11,6 +12,7 @@ import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
 describe('AuthService', () => {
+  let env: Record<string, string>;
   let service: AuthService;
   let userModel: {
     count: jest.Mock;
@@ -27,6 +29,7 @@ describe('AuthService', () => {
   let auditRecord: jest.Mock;
 
   beforeEach(async () => {
+    env = {};
     userModel = {
       count: jest.fn(),
       findUnique: jest.fn(),
@@ -57,6 +60,10 @@ describe('AuthService', () => {
         {
           provide: AuditService,
           useValue: { record: auditRecord },
+        },
+        {
+          provide: ConfigService,
+          useValue: { get: (key: string) => env[key] },
         },
       ],
     }).compile();
@@ -219,6 +226,53 @@ describe('AuthService', () => {
         service.registerFirst('attacker@example.com', 'password123'),
       ).rejects.toThrow(ForbiddenException);
       expect(userModel.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('signup', () => {
+    it('is refused while sign-up is disabled', async () => {
+      env.SIGNUP_ENABLED = 'false';
+
+      await expect(
+        service.signup('new@example.com', 'password123'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(userModel.create).not.toHaveBeenCalled();
+    });
+
+    it('creates a regular user, never an admin, and audits the source IP', async () => {
+      env.SIGNUP_ENABLED = 'true';
+      userModel.findUnique.mockResolvedValue(null);
+      userModel.create.mockResolvedValue({
+        id: 'user-9',
+        email: 'new@example.com',
+        passwordHash: 'x',
+        role: 'user',
+      });
+
+      const result = await service.signup(
+        'new@example.com',
+        'password123',
+        '203.0.114.7',
+      );
+
+      expect(result.user.role).toBe('user');
+      expect(userModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ role: 'user' }),
+        }),
+      );
+      expect(auditRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'signup', ipAddress: '203.0.114.7' }),
+      );
+    });
+
+    it('rejects an email that is already registered', async () => {
+      env.SIGNUP_ENABLED = 'true';
+      userModel.findUnique.mockResolvedValue({ id: 'existing' });
+
+      await expect(
+        service.signup('taken@example.com', 'password123'),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
