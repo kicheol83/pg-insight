@@ -9,7 +9,9 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
+import { AdminGuard } from '../auth/admin.guard';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
 import {
   IsString,
@@ -78,6 +80,7 @@ export class AlertsController {
     return this.alertEngine.getRules(targetId);
   }
 
+  @UseGuards(AdminGuard)
   @Post(':targetId/rules')
   @ApiOperation({ summary: 'Create a new alert rule' })
   public async createRule(
@@ -96,6 +99,7 @@ export class AlertsController {
     });
   }
 
+  @UseGuards(AdminGuard)
   @Delete('rules/:id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete an alert rule' })
@@ -122,6 +126,7 @@ export class AlertsController {
     return this.alertEngine.getActiveEvents(targetId);
   }
 
+  @UseGuards(AdminGuard)
   @Patch('events/:id/ack')
   @ApiOperation({ summary: 'Acknowledge an alert event' })
   public async acknowledge(@Param('id') id: string) {

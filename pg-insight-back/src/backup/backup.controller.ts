@@ -7,7 +7,9 @@ import {
   Res,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
+import { AdminGuard } from '../auth/admin.guard';
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { BackupService } from './backup.service';
@@ -22,6 +24,7 @@ export class BackupController {
     private readonly audit: AuditService,
   ) {}
 
+  @UseGuards(AdminGuard)
   @Post()
   @ApiOperation({
     summary: 'Start a new pg_dump backup for this target',
@@ -42,6 +45,7 @@ export class BackupController {
     return this.backupService.list(targetId);
   }
 
+  @UseGuards(AdminGuard)
   @Get(':backupId/download')
   @ApiOperation({ summary: 'Download a completed backup file' })
   async download(
@@ -67,6 +71,7 @@ export class BackupController {
     stream.pipe(res);
   }
 
+  @UseGuards(AdminGuard)
   @Delete(':backupId')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete a backup file and its record' })
