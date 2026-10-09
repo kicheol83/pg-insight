@@ -6,6 +6,8 @@ import React, {
   useRef,
 } from "react";
 import { io, Socket } from "socket.io-client";
+import { getToken } from "@/api/http";
+import { useAuth } from "@/store/auth";
 
 export type WsStatus = "connecting" | "connected" | "disconnected" | "error";
 
@@ -84,14 +86,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
 
   const socketRef = useRef<Socket | null>(null);
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      dispatch({ type: "SET_WS_STATUS", payload: "disconnected" });
+      return;
+    }
+
     const socketUrl = import.meta.env.DEV
       ? "http://localhost:3000/metrics"
       : "/metrics";
 
     const socket = io(socketUrl, {
       transports: ["websocket", "polling"],
+      auth: (cb) => cb({ token: getToken() }),
       reconnection: true,
       reconnectionDelay: 1000,
     });
@@ -109,8 +118,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       socket.disconnect();
+      socketRef.current = null;
     };
-  }, []);
+  }, [isAuthenticated]);
 
   const subscribeToTarget = (targetId: string) => {
     const socket = socketRef.current;

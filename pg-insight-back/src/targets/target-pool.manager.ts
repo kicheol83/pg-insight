@@ -23,6 +23,28 @@ export interface TargetPoolEntry {
   connectedAt?: Date;
 }
 
+interface StoredTarget {
+  id: string;
+  host: string;
+  port: number;
+  database: string;
+  username: string;
+  passwordEncrypted: string;
+  sslMode: string;
+  isActive: boolean;
+}
+
+const STORED_TARGET_SELECT = {
+  id: true,
+  host: true,
+  port: true,
+  database: true,
+  username: true,
+  passwordEncrypted: true,
+  sslMode: true,
+  isActive: true,
+};
+
 @Injectable()
 export class TargetPoolManager implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TargetPoolManager.name);
@@ -36,63 +58,58 @@ export class TargetPoolManager implements OnModuleInit, OnModuleDestroy {
   async onModuleInit(): Promise<void> {
     this.logger.log('🔌 TargetPoolManager initializing...');
 
-    const db = this.prisma as unknown as Record<string, unknown>;
-    const targets = await (
-      db['target'] as {
-        findMany: (args: unknown) => Promise<
-          Array<{
-            id: string;
-            host: string;
-            port: number;
-            database: string;
-            username: string;
-            passwordEncrypted: string;
-            sslMode: string;
-            isActive: boolean;
-          }>
-        >;
-      }
-    ).findMany({
+    const targets = await this.targetDelegate().findMany({
       where: { isActive: true },
-      select: {
-        id: true,
-        host: true,
-        port: true,
-        database: true,
-        username: true,
-        passwordEncrypted: true,
-        sslMode: true,
-        isActive: true,
-      },
+      select: STORED_TARGET_SELECT,
     });
 
     this.logger.log(`Found ${targets.length} active target(s)`);
 
-    const encryptionKey = getEncryptionKey();
-
     await Promise.allSettled(
-      targets.map((t) => {
-        let plainPassword: string;
-        try {
-          plainPassword = decrypt(t.passwordEncrypted, encryptionKey);
-        } catch (error) {
+      targets.map((t) =>
+        this.connectStored(t).catch((error: Error) => {
           this.logger.error(
-            `Failed to decrypt password for target ${t.id.slice(0, 8)}: ${(error as Error).message}`,
+            `Failed to start target ${t.id.slice(0, 8)}: ${error.message}`,
           );
-          return Promise.resolve();
-        }
-        return this.createPool(t.id, {
-          host: t.host,
-          port: t.port,
-          database: t.database,
-          user: t.username,
-          password: plainPassword,
-          ssl: this.buildSslConfig(t.sslMode),
-        });
-      }),
+        }),
+      ),
     );
 
     this.logger.log(`${this.pools.size}/${targets.length} target(s) connected`);
+  }
+
+  async reconnect(targetId: string): Promise<TargetPoolEntry> {
+    const target = await this.targetDelegate().findUnique({
+      where: { id: targetId },
+      select: STORED_TARGET_SELECT,
+    });
+    if (!target) {
+      throw new Error(`Target ${targetId} not found`);
+    }
+    return this.connectStored(target);
+  }
+
+  private async connectStored(target: StoredTarget): Promise<TargetPoolEntry> {
+    const password = decrypt(target.passwordEncrypted, getEncryptionKey());
+    return this.createPool(target.id, {
+      host: target.host,
+      port: target.port,
+      database: target.database,
+      user: target.username,
+      password,
+      ssl: this.buildSslConfig(target.sslMode),
+    });
+  }
+
+  private targetDelegate(): {
+    findMany: (args: unknown) => Promise<StoredTarget[]>;
+    findUnique: (args: unknown) => Promise<StoredTarget | null>;
+  } {
+    const db = this.prisma as unknown as Record<string, unknown>;
+    return db['target'] as {
+      findMany: (args: unknown) => Promise<StoredTarget[]>;
+      findUnique: (args: unknown) => Promise<StoredTarget | null>;
+    };
   }
 
   async onModuleDestroy(): Promise<void> {

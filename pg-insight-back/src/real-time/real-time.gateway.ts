@@ -9,7 +9,8 @@ import {
   OnGatewayInit,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
-import { Server, Socket } from 'socket.io';
+import { JwtService } from '@nestjs/jwt';
+import { Namespace, Socket } from 'socket.io';
 import type { AlertTriggerResult } from '../alerts/alert-engine.service';
 
 @WebSocketGateway({
@@ -28,22 +29,35 @@ export class RealtimeGateway
   private readonly logger = new Logger(RealtimeGateway.name);
 
   @WebSocketServer()
-  server!: Server;
-
-  private connectedClients = 0;
+  server!: Namespace;
 
   private readonly clientSubscriptions = new Map<string, Set<string>>();
 
-  afterInit(_server: Server): void {
+  constructor(private readonly jwtService: JwtService) {}
+
+  afterInit(server: Namespace): void {
+    server.use((socket, next) => {
+      const token: unknown = socket.handshake.auth?.token;
+      if (typeof token !== 'string' || token.length === 0) {
+        next(new Error('Unauthorized'));
+        return;
+      }
+      this.jwtService
+        .verifyAsync<{ sub: string; role: string }>(token)
+        .then((payload) => {
+          socket.data.user = { id: payload.sub, role: payload.role };
+          next();
+        })
+        .catch(() => next(new Error('Unauthorized')));
+    });
     this.logger.log('🔌 WebSocket Gateway initialized at /metrics');
   }
 
   handleConnection(client: Socket): void {
-    this.connectedClients++;
     this.clientSubscriptions.set(client.id, new Set());
 
     this.logger.debug(
-      `Client connected: ${client.id} | Total: ${this.connectedClients}`,
+      `Client connected: ${client.id} | Total: ${this.server.sockets.size}`,
     );
 
     client.emit('connected', {
@@ -54,11 +68,10 @@ export class RealtimeGateway
   }
 
   handleDisconnect(client: Socket): void {
-    this.connectedClients--;
     this.clientSubscriptions.delete(client.id);
 
     this.logger.debug(
-      `Client disconnected: ${client.id} | Total: ${this.connectedClients}`,
+      `Client disconnected: ${client.id} | Total: ${this.server.sockets.size}`,
     );
   }
 
@@ -219,19 +232,16 @@ export class RealtimeGateway
   }
 
   private toTarget(targetId: string, event: string, data: unknown): void {
-    if (this.connectedClients === 0) return;
-
     const roomName = `target:${targetId}`;
 
-    const room = this.server.sockets.adapter.rooms.get(roomName);
-    if (!room || room.size === 0) return;
+    if (!this.server.adapter.rooms.get(roomName)?.size) return;
 
     this.server.to(roomName).emit(event, data);
   }
 
   getStats() {
     return {
-      connectedClients: this.connectedClients,
+      connectedClients: this.server.sockets.size,
       subscriptions: Array.from(this.clientSubscriptions.entries()).map(
         ([clientId, targets]) => ({
           clientId: clientId.slice(0, 8),

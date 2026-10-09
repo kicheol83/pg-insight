@@ -268,10 +268,8 @@ export class LockCollector extends BaseCollector<LockSnapshot> {
       JOIN pg_stat_activity blocker_a ON blocker_a.pid = blocker.pid
 
       -- Qaysi table (optional)
-      LEFT JOIN pg_class pg_cls ON pg_cls.oid = waiter.relation
-        RENAME AS rel
-      LEFT JOIN pg_namespace pg_ns ON pg_ns.oid = pg_cls.relnamespace
-        RENAME AS ns
+      LEFT JOIN pg_class rel ON rel.oid = waiter.relation
+      LEFT JOIN pg_namespace ns ON ns.oid = rel.relnamespace
 
       WHERE
         NOT waiter.granted
