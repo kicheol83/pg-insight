@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AdminGuard } from '../auth/admin.guard';
+import { TargetAccess } from '../auth/target-access.decorator';
 import {
   ApiTags,
   ApiOperation,
@@ -151,6 +152,7 @@ export class TargetsController {
   async findAll(@CurrentUser() user: AuthUser) {
     return this.targetsService.findAll(user.id, user.role);
   }
+  @TargetAccess('id')
   @Get(':id')
   @ApiOperation({ summary: 'Get single target status' })
   @ApiParam({ name: 'id', description: 'Target UUID' })
@@ -198,6 +200,7 @@ export class TargetsController {
   }
 
   @UseGuards(AdminGuard)
+  @TargetAccess('id')
   @Patch(':id')
   @ApiOperation({ summary: 'Update target configuration' })
   @ApiParam({ name: 'id', description: 'Target UUID' })
@@ -217,6 +220,7 @@ export class TargetsController {
   }
 
   @UseGuards(AdminGuard)
+  @TargetAccess('id')
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -234,6 +238,7 @@ export class TargetsController {
     return result;
   }
 
+  @TargetAccess('id')
   @Post(':id/refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -245,6 +250,7 @@ export class TargetsController {
   }
 
   @UseGuards(AdminGuard)
+  @TargetAccess('id')
   @Post(':id/pause')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -256,6 +262,7 @@ export class TargetsController {
   }
 
   @UseGuards(AdminGuard)
+  @TargetAccess('id')
   @Post(':id/resume')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

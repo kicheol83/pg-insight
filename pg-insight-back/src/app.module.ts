@@ -10,6 +10,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { TargetAccessGuard } from './auth/target-access.guard';
 import { AuditModule } from './audit/audit.module';
 import { HealthModule } from './health/health.module';
 import { TargetsModule } from './targets/targets.module';
@@ -60,6 +61,8 @@ import { SecurityAuditModule } from './security/security-audit.model';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
 
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+
+    { provide: APP_GUARD, useClass: TargetAccessGuard },
   ],
 })
 export class AppModule {}

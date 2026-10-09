@@ -1,3 +1,5 @@
+jest.mock('../database/prisma.service', () => ({ PrismaService: class {} }));
+
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { IoAdapter } from '@nestjs/platform-socket.io';
@@ -5,6 +7,7 @@ import { Test } from '@nestjs/testing';
 import { AddressInfo } from 'net';
 import { io, Socket } from 'socket.io-client';
 import { RealtimeGateway } from './real-time.gateway';
+import { TargetAccessService } from '../auth/target-access.service';
 
 const SECRET = 'test-secret-test-secret-test-secret-123';
 const TARGET_ID = '5722600a-0000-4000-8000-000000000000';
@@ -30,7 +33,17 @@ describe('RealtimeGateway', () => {
   beforeAll(async () => {
     jwt = new JwtService({ secret: SECRET });
     const moduleRef = await Test.createTestingModule({
-      providers: [RealtimeGateway, { provide: JwtService, useValue: jwt }],
+      providers: [
+        RealtimeGateway,
+        { provide: JwtService, useValue: jwt },
+        {
+          provide: TargetAccessService,
+          useValue: {
+            canAccess: async (actor: { id: string }, targetId: string) =>
+              actor.id === 'user-1' && targetId === TARGET_ID,
+          },
+        },
+      ],
     }).compile();
 
     app = moduleRef.createNestApplication({ logger: false });
@@ -129,5 +142,24 @@ describe('RealtimeGateway', () => {
     await expect(delivered).resolves.toMatchObject({ total: 10 });
     await new Promise((r) => setTimeout(r, 100));
     expect(bystanderReceived).not.toHaveBeenCalled();
+  });
+
+  it("refuses to subscribe a client to another tenant's target", async () => {
+    const intruder = connect(
+      await jwt.signAsync({ sub: 'user-2', email: 'x@y.z', role: 'user' }),
+    );
+    await connected(intruder);
+
+    const ack = await intruder.emitWithAck('subscribe', {
+      targetId: TARGET_ID,
+    });
+    const received = jest.fn();
+    intruder.on('connections', received);
+
+    gateway.broadcastConnections(TARGET_ID, snapshot);
+
+    expect(ack).toEqual({ success: false, targetId: TARGET_ID });
+    await new Promise((r) => setTimeout(r, 100));
+    expect(received).not.toHaveBeenCalled();
   });
 });

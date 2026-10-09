@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { AdminGuard } from './admin.guard';
+import { TargetAccessService } from './target-access.service';
 import { AuditModule } from '../audit/audit.module';
 
 @Module({
@@ -30,7 +31,7 @@ import { AuditModule } from '../audit/audit.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard, AdminGuard],
-  exports: [JwtAuthGuard, AdminGuard, JwtModule],
+  providers: [AuthService, JwtAuthGuard, AdminGuard, TargetAccessService],
+  exports: [JwtAuthGuard, AdminGuard, JwtModule, TargetAccessService],
 })
 export class AuthModule {}
