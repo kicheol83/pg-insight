@@ -327,7 +327,7 @@ describe('LiveQueryService — getDiagnostics', () => {
   it('reports overallStatus healthy when every check passes', async () => {
     poolManager.query.mockImplementation(async (_id: string, sql: string) => {
       if (sql.includes('server_version_num'))
-        return [{ version_num: '160001' }];
+        return [{ server_version_num: '160001' }];
       if (sql.includes('pg_extension')) return [{ exists: true }];
       return [];
     });
@@ -352,7 +352,7 @@ describe('LiveQueryService — getDiagnostics', () => {
   it('reports overallStatus degraded when only warnings are present', async () => {
     poolManager.query.mockImplementation(async (_id: string, sql: string) => {
       if (sql.includes('server_version_num'))
-        return [{ version_num: '160001' }];
+        return [{ server_version_num: '160001' }];
       if (sql.includes('pg_extension')) return [{ exists: false }]; // warning: missing extension
       return [];
     });
@@ -370,7 +370,7 @@ describe('LiveQueryService — getDiagnostics', () => {
   it('marks pg_stat_activity as a critical error with a grant command when permission is denied', async () => {
     poolManager.query.mockImplementation(async (_id: string, sql: string) => {
       if (sql.includes('server_version_num'))
-        return [{ version_num: '160001' }];
+        return [{ server_version_num: '160001' }];
       if (sql.includes('pg_extension')) return [{ exists: true }];
       if (sql.includes('pg_stat_activity'))
         throw new Error('permission denied for pg_stat_activity');
@@ -393,7 +393,7 @@ describe('LiveQueryService — getDiagnostics', () => {
     poolManager.query.mockImplementation(async (_id: string, sql: string) => {
       if (sql.includes('pg_locks')) throw new Error('permission denied');
       if (sql.includes('server_version_num'))
-        return [{ version_num: '150000' }];
+        return [{ server_version_num: '150000' }];
       if (sql.includes('pg_extension')) return [{ exists: true }];
       return [];
     });

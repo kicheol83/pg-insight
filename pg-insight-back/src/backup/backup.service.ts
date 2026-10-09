@@ -158,10 +158,7 @@ export class BackupService {
 
     this.logger.log(`Starting pg_dump for target ${target.id} → ${filePath}`);
 
-    const pgDumpPath =
-      process.platform === 'win32'
-        ? 'C:\\Program Files\\PostgreSQL\\17\\bin\\pg_dump.exe'
-        : 'pg_dump';
+    const pgDumpPath = process.env.PG_DUMP_PATH || 'pg_dump';
 
     const child = spawn(pgDumpPath, args, {
       env: {
