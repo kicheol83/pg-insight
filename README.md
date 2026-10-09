@@ -69,6 +69,16 @@ npm run dev
 
 http://localhost:5173 에서 첫 관리자 계정을 만들 수 있습니다.
 
+## 대상 DB 준비
+
+```sql
+CREATE ROLE insight_monitor LOGIN PASSWORD '...';
+GRANT pg_monitor TO insight_monitor;
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+```
+
+`pg_stat_statements`는 `shared_preload_libraries` 설정 후 재시작이 필요합니다.
+
 ## 테스트
 
 ```powershell

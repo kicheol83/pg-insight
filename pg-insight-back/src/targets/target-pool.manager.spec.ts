@@ -113,3 +113,75 @@ describe('TargetPoolManager.createPool host policy', () => {
     },
   );
 });
+
+describe('TargetPoolManager status after reconnect', () => {
+  const DATABASE_URL = process.env.TEST_TARGET_DATABASE_URL;
+
+  beforeEach(() => {
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  (DATABASE_URL ? it : it.skip)(
+    'keeps a paused target paused when its pool reconnects',
+    async () => {
+      const url = new URL(DATABASE_URL!);
+      let row: Record<string, unknown> = {
+        id: TARGET_ID,
+        host: url.hostname,
+        port: Number(url.port || 5432),
+        database: url.pathname.slice(1),
+        username: decodeURIComponent(url.username),
+        passwordEncrypted: encrypt(
+          decodeURIComponent(url.password),
+          getEncryptionKey(),
+        ),
+        sslMode: 'disable',
+        isActive: true,
+        status: 'paused',
+        createdByUser: { role: 'admin' },
+      };
+      const prisma = {
+        target: {
+          findUnique: jest.fn(async () => row),
+          findMany: jest.fn(async () => (row.status === 'paused' ? [row] : [])),
+          update: jest.fn(
+            async ({ data }: { data: Record<string, unknown> }) => {
+              row = { ...row, ...data };
+              return row;
+            },
+          ),
+          updateMany: jest.fn(
+            async ({
+              where,
+              data,
+            }: {
+              where: { status: { not: string } };
+              data: Record<string, unknown>;
+            }) => {
+              if (row.status === where.status.not) return { count: 0 };
+              row = { ...row, ...data };
+              return { count: 1 };
+            },
+          ),
+        },
+      };
+      const manager = new TargetPoolManager(
+        prisma as never,
+        new TargetHostPolicy({ get: () => undefined } as never),
+      );
+
+      try {
+        const entry = await manager.reconnect(TARGET_ID);
+
+        expect(entry.status).toBe('active');
+        expect(row.status).toBe('paused');
+        expect(row.pgVersion).toBeDefined();
+        expect(await manager.pausedTargetIds()).toEqual([TARGET_ID]);
+      } finally {
+        await manager.removePool(TARGET_ID);
+      }
+    },
+  );
+});
