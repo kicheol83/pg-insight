@@ -44,25 +44,70 @@ describe('LiveQueryService', () => {
   }
 
   describe('explainQuery — xavfsizlik filtri', () => {
-    it('allows a plain SELECT query and runs it inside a READ ONLY transaction', async () => {
+    it('runs EXPLAIN ANALYZE inside a READ ONLY transaction with timeouts when analyze is requested', async () => {
+      mockSuccessfulExplain();
+      const result = await service.explainQuery(
+        'target-1',
+        'SELECT * FROM users',
+        true,
+      );
+
+      expect(result.executionTimeMs).toBeGreaterThanOrEqual(0);
+      expect(result.analyzed).toBe(true);
+      expect(mockClient.query).toHaveBeenNthCalledWith(
+        1,
+        expect.stringMatching(
+          /^BEGIN TRANSACTION READ ONLY; SET LOCAL statement_timeout = '\d+s'; SET LOCAL lock_timeout = '\d+s'$/,
+        ),
+      );
+      expect(mockClient.query).toHaveBeenNthCalledWith(
+        2,
+        'EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) SELECT * FROM users',
+      );
+      expect(mockClient.release).toHaveBeenCalled();
+    });
+
+    it('plans without executing the query unless analyze is requested', async () => {
       mockSuccessfulExplain();
       const result = await service.explainQuery(
         'target-1',
         'SELECT * FROM users',
       );
 
-      expect(result.executionTimeMs).toBeGreaterThanOrEqual(0);
-      expect(mockClient.query).toHaveBeenNthCalledWith(
-        1,
-        'BEGIN TRANSACTION READ ONLY',
-      );
+      expect(result.analyzed).toBe(false);
       expect(mockClient.query).toHaveBeenNthCalledWith(
         2,
-        expect.stringContaining(
-          'EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) SELECT * FROM users',
-        ),
+        'EXPLAIN (FORMAT JSON) SELECT * FROM users',
       );
-      expect(mockClient.release).toHaveBeenCalled();
+    });
+
+    it.each([
+      'SELECT pg_terminate_backend(123)',
+      'SELECT pg_catalog.pg_cancel_backend(123)',
+      'SELECT pg_sleep(60)',
+      'SELECT "pg_sleep"(60)',
+      'SELECT pg_sleep /* gap */ (60)',
+      'SELECT pg_advisory_lock(1)',
+      'SELECT pg_try_advisory_lock(1)',
+      "SELECT set_config('statement_timeout', '0', false)",
+      "SELECT query_to_xml('select pg_terminate_backend(1)', true, true, '')",
+      "SELECT * FROM dblink('host=x', 'select 1') AS t(x int)",
+      "SELECT pg_read_file('/etc/passwd')",
+    ])(
+      'rejects a dangerous function call before touching the database: %s',
+      async (sql) => {
+        await expect(
+          service.explainQuery('target-1', sql, true),
+        ).rejects.toThrow('Query calls a function that is not allowed');
+        expect(poolManager.getPool).not.toHaveBeenCalled();
+      },
+    );
+
+    it('does not reject column names that merely contain a forbidden word', async () => {
+      mockSuccessfulExplain();
+      await expect(
+        service.explainQuery('target-1', 'SELECT pg_sleep_count FROM stats'),
+      ).resolves.toBeDefined();
     });
 
     it('allows a WITH (CTE) query', async () => {
@@ -139,6 +184,23 @@ describe('LiveQueryService', () => {
       await expect(
         service.explainQuery('target-1', 'SELECT * FROM users'),
       ).rejects.toThrow(/only read-only queries are allowed/);
+      expect(mockClient.release).toHaveBeenCalled();
+    });
+
+    it('translates a statement timeout into a client error', async () => {
+      mockClient.query
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(
+          Object.assign(
+            new Error('canceling statement due to statement timeout'),
+            { code: '57014' },
+          ),
+        )
+        .mockResolvedValueOnce(undefined);
+
+      await expect(
+        service.explainQuery('target-1', 'SELECT 1', true),
+      ).rejects.toThrow(BadRequestException);
       expect(mockClient.release).toHaveBeenCalled();
     });
 

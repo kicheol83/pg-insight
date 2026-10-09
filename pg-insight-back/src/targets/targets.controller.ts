@@ -8,7 +8,9 @@ import {
   Body,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
+import { AdminGuard } from '../auth/admin.guard';
 import {
   ApiTags,
   ApiOperation,
@@ -158,6 +160,7 @@ export class TargetsController {
 
   // POST /targets/test — connection test (SAQLASHDAN OLDIN)
   // :id bo'lmasin deb /test birinchi keladi
+  @UseGuards(AdminGuard)
   @Post('test')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -169,6 +172,7 @@ export class TargetsController {
   }
 
   // POST /targets — create
+  @UseGuards(AdminGuard)
   @Post()
   @ApiOperation({
     summary: 'Add a new PostgreSQL target',
@@ -193,6 +197,7 @@ export class TargetsController {
     return target;
   }
 
+  @UseGuards(AdminGuard)
   @Patch(':id')
   @ApiOperation({ summary: 'Update target configuration' })
   @ApiParam({ name: 'id', description: 'Target UUID' })
@@ -211,6 +216,7 @@ export class TargetsController {
     return result;
   }
 
+  @UseGuards(AdminGuard)
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -238,6 +244,7 @@ export class TargetsController {
     return this.targetsService.triggerRefresh(id);
   }
 
+  @UseGuards(AdminGuard)
   @Post(':id/pause')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -248,6 +255,7 @@ export class TargetsController {
     return this.targetsService.pause(id);
   }
 
+  @UseGuards(AdminGuard)
   @Post(':id/resume')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

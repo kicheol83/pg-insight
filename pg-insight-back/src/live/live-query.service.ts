@@ -2,6 +2,11 @@ import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { TargetPoolManager } from '../targets/target-pool.manager';
 import { PrismaService } from '../database/prisma.service';
 
+const EXPLAIN_STATEMENT_TIMEOUT = '5s';
+const EXPLAIN_LOCK_TIMEOUT = '1s';
+const EXPLAIN_FORBIDDEN_FUNCTIONS =
+  /\b(pg_terminate_backend|pg_cancel_backend|pg_sleep\w*|pg_(try_)?advisory\w*|set_config|dblink\w*|lo_\w+|pg_read_\w*file|pg_ls_\w+|pg_stat_file|pg_reload_conf|pg_rotate_logfile|pg_notify|pg_logical_emit_message|query_to_xml\w*|cursor_to_xml\w*|table_to_xml\w*|database_to_xml\w*|schema_to_xml\w*)"?\s*\(/i;
+
 @Injectable()
 export class LiveQueryService {
   private readonly logger = new Logger(LiveQueryService.name);
@@ -187,7 +192,7 @@ export class LiveQueryService {
     return { queries, count: queries.length, total, offset };
   }
 
-  async explainQuery(targetId: string, sql: string) {
+  async explainQuery(targetId: string, sql: string, analyze = false) {
     const withoutComments = sql
       .replace(/--.*$/gm, '')
       .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -213,15 +218,26 @@ export class LiveQueryService {
       throw new BadRequestException('Query contains forbidden keywords');
     }
 
+    if (EXPLAIN_FORBIDDEN_FUNCTIONS.test(trimmed)) {
+      throw new BadRequestException(
+        'Query calls a function that is not allowed',
+      );
+    }
+
     const pool = this.poolManager.getPool(targetId);
     if (!pool) throw new BadRequestException('Target is not connected');
 
     const client = await pool.connect();
     const start = Date.now();
     try {
-      await client.query('BEGIN TRANSACTION READ ONLY');
+      await client.query(
+        `BEGIN TRANSACTION READ ONLY; SET LOCAL statement_timeout = '${EXPLAIN_STATEMENT_TIMEOUT}'; SET LOCAL lock_timeout = '${EXPLAIN_LOCK_TIMEOUT}'`,
+      );
+      const options = analyze
+        ? 'ANALYZE, BUFFERS, FORMAT JSON'
+        : 'FORMAT JSON';
       const result = await client.query<{ 'QUERY PLAN': unknown }>(
-        `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${trimmed}`,
+        `EXPLAIN (${options}) ${trimmed}`,
       );
       await client.query('ROLLBACK');
       const executionTimeMs = Date.now() - start;
@@ -247,12 +263,22 @@ export class LiveQueryService {
         );
       }
 
-      return { plan: [plan], executionTimeMs, recommendations };
+      return {
+        plan: [plan],
+        executionTimeMs,
+        recommendations,
+        analyzed: analyze,
+      };
     } catch (error) {
       try {
         await client.query('ROLLBACK');
       } catch {}
       const message = (error as Error).message ?? '';
+      if ((error as { code?: string }).code === '57014') {
+        throw new BadRequestException(
+          `Query exceeded the ${EXPLAIN_STATEMENT_TIMEOUT} EXPLAIN time limit`,
+        );
+      }
       if (/read-only transaction/i.test(message)) {
         throw new BadRequestException(
           'Query attempted a write operation — only read-only queries are allowed',
