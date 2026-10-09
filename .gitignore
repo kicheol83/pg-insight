@@ -1,2 +1,3 @@
 .env
 *.tsbuildinfo
+.deploy-history

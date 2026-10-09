@@ -39,6 +39,7 @@ services:
       - internal
 
   api:
+    image: pg-insight-api:${APP_TAG:-latest}
     build: ./pg-insight-back
     restart: unless-stopped
     depends_on:
@@ -69,6 +70,7 @@ services:
       - monitoring
 
   web:
+    image: pg-insight-web:${APP_TAG:-latest}
     build: ./pg-insight-ui
     container_name: pg-insight-web
     restart: unless-stopped
