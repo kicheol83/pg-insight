@@ -65,3 +65,43 @@ describe('TargetsService target creation limits', () => {
     expect(count).not.toHaveBeenCalled();
   });
 });
+
+describe('TargetsService default SSL mode', () => {
+  it('stores and connects a new target with sslmode require when none is given', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 't1', name: 'ledger' });
+    const createPool = jest.fn().mockResolvedValue({});
+    const config = { get: () => undefined };
+    const service = new TargetsService(
+      {
+        target: {
+          count: jest.fn(),
+          findFirst: jest.fn().mockResolvedValue(null),
+          create,
+        },
+      } as never,
+      { createPool } as never,
+      { startCollection: jest.fn() } as never,
+      new TargetHostPolicy(config as never),
+      config as never,
+    );
+    const testConnection = jest
+      .spyOn(service, 'testConnection')
+      .mockResolvedValue({ success: true } as never);
+    jest.spyOn(service, 'findOne').mockResolvedValue({} as never);
+
+    await service.create(
+      { ...dto, host: 'db.example.com' },
+      { id: 'root', role: 'admin' },
+    );
+
+    expect(testConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ sslMode: 'require' }),
+      true,
+    );
+    expect(create.mock.calls[0][0].data.sslMode).toBe('require');
+    expect(createPool).toHaveBeenCalledWith(
+      't1',
+      expect.objectContaining({ ssl: { rejectUnauthorized: false } }),
+    );
+  });
+});

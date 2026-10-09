@@ -81,6 +81,7 @@
 - 점이 없는 이름과 `.local`, `.internal`, `.lan` 등 내부 도메인 거부 (예: Docker 서비스명 `platform-db`)
 - 검사한 IP로 직접 접속하고 TLS에는 원래 호스트명(SNI)을 사용해, 검사 후 DNS 응답이 바뀌는 DNS rebinding을 차단
 - 자체 호스팅·사내망에서는 `TARGET_ALLOW_PRIVATE_HOSTS=true`로 해제 가능
+- 새 대상의 기본 SSL 모드는 `require`. node-postgres에는 libpq의 `prefer`(TLS 실패 시 평문 전환)가 없어 `prefer`가 사실상 평문 접속이었기 때문에 기본값을 바꿈
 
 **`EXPLAIN` 엔드포인트**
 - 주석 제거 → 다중 구문 차단 → `SELECT`/`WITH`만 허용 → 키워드 차단 → 위험 함수 차단(`pg_sleep`, `pg_terminate_backend`, `dblink`, `lo_*`, 파일 읽기 함수 등)
@@ -211,7 +212,6 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
 ## 알려진 한계 및 개선 예정
 
-- `sslMode=prefer`(기본값)는 TLS 없이 접속함 (node-postgres에는 TLS 실패 시 평문으로 넘어가는 동작이 없음). `require` 이상을 선택해야 암호화됨
 - UI가 대상별 WebSocket room을 아직 구독하지 않아, 대시보드는 REST 폴링으로 갱신
 - 이메일 인증, 비밀번호 재설정, 계정 삭제 미구현
 - UI 문구가 우즈베크어로 되어 있음 (한국어/영어 지원 예정)

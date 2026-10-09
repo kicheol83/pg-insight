@@ -81,6 +81,7 @@ An open-source, multi-tenant PostgreSQL monitoring service. Anyone can sign up, 
 - Single-label names and internal suffixes such as `.local`, `.internal`, `.lan` are rejected (e.g. the Docker service name `platform-db`)
 - The connection goes to the checked IP, with the original hostname used for TLS (SNI), so DNS rebinding after the check does not work
 - Self-hosted or on-premises installs can lift this with `TARGET_ALLOW_PRIVATE_HOSTS=true`
+- New targets default to SSL mode `require`. node-postgres has no libpq-style `prefer` (TLS with plaintext fallback), so `prefer` used to mean a plaintext connection
 
 **`EXPLAIN` endpoint**
 - Comment stripping → multi-statement rejection → `SELECT`/`WITH` only → keyword blocklist → dangerous function denylist (`pg_sleep`, `pg_terminate_backend`, `dblink`, `lo_*`, file-reading functions and more)
@@ -211,7 +212,6 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
 ## Known Limitations and Roadmap
 
-- `sslMode=prefer` (the default) connects without TLS, because node-postgres has no fallback from TLS to plaintext; choose `require` or stricter for encryption
 - The UI does not subscribe to per-target WebSocket rooms yet; dashboards refresh by REST polling
 - No email verification, password reset or account deletion
 - UI text is in Uzbek (Korean and English planned)

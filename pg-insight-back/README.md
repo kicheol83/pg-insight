@@ -65,7 +65,7 @@ Every endpoint under `/api/v1` requires a `Bearer` JWT except `GET /auth/config`
 - **Admin invites**: `POST /auth/register` (admin only).
 - **Tokens**: access tokens are short-lived (15 minutes, `JWT_EXPIRES_IN`). Refresh tokens are long-lived (7 days), stored as a SHA-256 hash and rotated on every use; `POST /auth/logout` revokes all of a user's refresh tokens.
 - **Ownership**: `TargetAccessGuard` runs globally after `JwtAuthGuard`. Any route with `:targetId` is checked automatically; routes keyed by another ID declare it with `@TargetAccess('id', 'alertRule' | 'alertEvent' | 'backup')`. Admins can access every existing target; other users only targets they created. A missing or foreign target returns 404.
-- **Quota and host policy**: non-admin users can have `TARGET_QUOTA_PER_USER` active targets (default 3). `TargetHostPolicy` resolves the host, rejects private/internal addresses unless `TARGET_ALLOW_PRIVATE_HOSTS=true`, and the pool connects to the checked IP with the original hostname as the TLS servername.
+- **Quota and host policy**: non-admin users can have `TARGET_QUOTA_PER_USER` active targets (default 3). `TargetHostPolicy` resolves the host, rejects private/internal addresses unless `TARGET_ALLOW_PRIVATE_HOSTS=true`, and the pool connects to the checked IP with the original hostname as the TLS servername. New targets default to `sslMode=require`; node-postgres has no libpq-style `prefer`, so `prefer` and `allow` connect without TLS.
 - **Audit log**: logins (success/failure), sign-ups, target create/update/delete and every `EXPLAIN` call (including rejected ones) are recorded in `audit_logs`. Audit failures never block the underlying action.
 
 ## EXPLAIN endpoint hardening
@@ -169,7 +169,6 @@ Every query in `live-query.service.ts` and the collectors runs against a databas
 
 ## Known limitations
 
-- `sslMode=prefer` (the default) maps to no TLS in node-postgres; use `require` or stricter for encryption.
 - No email verification, password reset or account deletion.
 - The encryption key rotation script has not been updated for the Prisma 7 driver adapter.
 - ESLint configuration needs cleanup; no E2E tests.

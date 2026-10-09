@@ -63,6 +63,8 @@ export interface TargetStatus {
   uptime?: number;
 }
 
+const DEFAULT_SSL_MODE = 'require';
+
 @Injectable()
 export class TargetsService {
   private readonly logger = new Logger(TargetsService.name);
@@ -171,8 +173,8 @@ export class TargetsService {
       await this.assertWithinQuota(actor.id);
     }
 
-    // 1. Connection test avval
-    const testResult = await this.testConnection(dto, trusted);
+    const sslMode = dto.sslMode ?? DEFAULT_SSL_MODE;
+    const testResult = await this.testConnection({ ...dto, sslMode }, trusted);
     if (!testResult.success) {
       throw new BadRequestException(
         `Cannot connect to PostgreSQL: ${testResult.errorMessage}`,
@@ -215,7 +217,7 @@ export class TargetsService {
         database: dto.database,
         username: dto.username,
         passwordEncrypted,
-        sslMode: dto.sslMode ?? 'prefer',
+        sslMode,
         sslCert: dto.sslCert,
         pgVersion: testResult.pgVersion,
         pgVersionNum: testResult.pgVersionNum,
@@ -236,7 +238,7 @@ export class TargetsService {
       database: dto.database,
       user: dto.username,
       password: dto.password,
-      ssl: this.buildSslConfig(dto.sslMode),
+      ssl: this.buildSslConfig(sslMode),
     });
 
     await this.orchestrator.startCollection(target.id);
@@ -327,7 +329,7 @@ export class TargetsService {
       connectionTimeoutMillis: 5_000,
       idleTimeoutMillis: 1_000,
       ssl: withServername(
-        this.buildSslConfig(dto.sslMode),
+        this.buildSslConfig(dto.sslMode ?? DEFAULT_SSL_MODE),
         resolved.servername,
       ),
       application_name: 'pg-insight-test',
