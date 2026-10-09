@@ -21,6 +21,7 @@ import { useQuery } from "@/hooks/useQuery";
 import { useActiveTarget } from "@/store/app";
 import { liveApi } from "@/api/endpoints";
 import { fmtBytes, fmtNum } from "@/lib/format";
+import { useI18n } from "@/i18n";
 
 function ProgressRow({
   title,
@@ -58,6 +59,7 @@ function ProgressRow({
 
 export default function JobProgressPage() {
   const { activeTargetId } = useActiveTarget();
+  const { t } = useI18n();
 
   const { data, loading, refetch, updatedAt } = useQuery(
     () => liveApi.jobProgress(activeTargetId ?? ""),
@@ -68,8 +70,8 @@ export default function JobProgressPage() {
     return (
       <>
         <TopBar
-          title="Job Progress"
-          subtitle="CREATE INDEX, CLUSTER, ANALYZE, COPY jarayonlari"
+          title={t("nav.jobProgress")}
+          subtitle={t("jobProgress.subtitle")}
         />
         <PageContent>
           <div className="flex items-center gap-3 mb-5">
@@ -77,7 +79,7 @@ export default function JobProgressPage() {
           </div>
           <EmptyState
             icon={<ListChecks size={32} />}
-            title="Target tanlanmagan"
+            title={t("jobProgress.noTarget")}
           />
         </PageContent>
       </>
@@ -87,11 +89,11 @@ export default function JobProgressPage() {
   return (
     <>
       <TopBar
-        title="Job Progress"
+        title={t("nav.jobProgress")}
         subtitle={
           updatedAt
-            ? "5s yangilanish"
-            : "CREATE INDEX, CLUSTER, ANALYZE, COPY jarayonlari"
+            ? t("jobProgress.refreshInterval")
+            : t("jobProgress.subtitle")
         }
         actions={
           <Button
@@ -101,7 +103,7 @@ export default function JobProgressPage() {
             onClick={refetch}
             loading={loading}
           >
-            Yangilash
+            {t("common.refresh")}
           </Button>
         }
       />
@@ -110,17 +112,16 @@ export default function JobProgressPage() {
           <TargetSelector />
           {(data?.totalActive ?? 0) > 0 && (
             <Badge variant="info" size="sm" dot>
-              {data?.totalActive} ta faol jarayon
+              {t("jobProgress.activeCount", { count: data?.totalActive ?? 0 })}
             </Badge>
           )}
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-          {/* CREATE INDEX */}
           <Card>
             <CardHeader
               title="CREATE INDEX"
-              subtitle="Indeks yaratish jarayoni (CONCURRENTLY holatlarida ham)"
+              subtitle={t("jobProgress.createIndexSubtitle")}
               icon={<Layers size={15} />}
               action={
                 data?.createIndex.length ? (
@@ -133,8 +134,8 @@ export default function JobProgressPage() {
             {!data?.createIndex.length ? (
               <EmptyState
                 icon={<Layers size={24} />}
-                title="Faol jarayon yo'q"
-                message="Yangi indeks yaratilayotganda shu yerda ko'rinadi"
+                title={t("jobProgress.noActive")}
+                message={t("jobProgress.noCreateIndexMessage")}
               />
             ) : (
               <div className="space-y-2.5">
@@ -149,18 +150,20 @@ export default function JobProgressPage() {
                         ? "CONCURRENTLY"
                         : undefined
                     }
-                    detail={`${fmtNum(p.blocksDone)}/${fmtNum(p.blocksTotal)} blok`}
+                    detail={t("jobProgress.blocks", {
+                      done: fmtNum(p.blocksDone),
+                      total: fmtNum(p.blocksTotal),
+                    })}
                   />
                 ))}
               </div>
             )}
           </Card>
 
-          {/* CLUSTER / VACUUM FULL */}
           <Card>
             <CardHeader
               title="CLUSTER / VACUUM FULL"
-              subtitle="Jadvalni butunlay qayta yozish jarayoni"
+              subtitle={t("jobProgress.clusterSubtitle")}
               icon={<Boxes size={15} />}
               action={
                 data?.cluster.length ? (
@@ -173,7 +176,7 @@ export default function JobProgressPage() {
             {!data?.cluster.length ? (
               <EmptyState
                 icon={<Boxes size={24} />}
-                title="Faol jarayon yo'q"
+                title={t("jobProgress.noActive")}
               />
             ) : (
               <div className="space-y-2.5">
@@ -184,18 +187,20 @@ export default function JobProgressPage() {
                     subtitle={p.phase}
                     pct={p.progressPct}
                     badge={p.command}
-                    detail={`${fmtNum(p.heapBlksScanned)}/${fmtNum(p.heapBlksTotal)} blok`}
+                    detail={t("jobProgress.blocks", {
+                      done: fmtNum(p.heapBlksScanned),
+                      total: fmtNum(p.heapBlksTotal),
+                    })}
                   />
                 ))}
               </div>
             )}
           </Card>
 
-          {/* ANALYZE */}
           <Card>
             <CardHeader
               title="ANALYZE"
-              subtitle="Statistika yig'ish jarayoni"
+              subtitle={t("jobProgress.analyzeSubtitle")}
               icon={<BarChart3 size={15} />}
               action={
                 data?.analyze.length ? (
@@ -208,7 +213,7 @@ export default function JobProgressPage() {
             {!data?.analyze.length ? (
               <EmptyState
                 icon={<BarChart3 size={24} />}
-                title="Faol jarayon yo'q"
+                title={t("jobProgress.noActive")}
               />
             ) : (
               <div className="space-y-2.5">
@@ -218,18 +223,20 @@ export default function JobProgressPage() {
                     title={`${p.schemaName}.${p.tableName}`}
                     subtitle={p.phase}
                     pct={p.progressPct}
-                    detail={`${fmtNum(p.sampleBlksScanned)}/${fmtNum(p.sampleBlksTotal)} blok`}
+                    detail={t("jobProgress.blocks", {
+                      done: fmtNum(p.sampleBlksScanned),
+                      total: fmtNum(p.sampleBlksTotal),
+                    })}
                   />
                 ))}
               </div>
             )}
           </Card>
 
-          {/* COPY */}
           <Card>
             <CardHeader
               title="COPY"
-              subtitle="Import/export jarayoni (katta CSV yuklash va h.k.)"
+              subtitle={t("jobProgress.copySubtitle")}
               icon={<Copy size={15} />}
               action={
                 data?.copy.length ? (
@@ -240,7 +247,10 @@ export default function JobProgressPage() {
               }
             />
             {!data?.copy.length ? (
-              <EmptyState icon={<Copy size={24} />} title="Faol jarayon yo'q" />
+              <EmptyState
+                icon={<Copy size={24} />}
+                title={t("jobProgress.noActive")}
+              />
             ) : (
               <div className="space-y-2.5">
                 {data.copy.map((p) => (
@@ -256,7 +266,9 @@ export default function JobProgressPage() {
                     detail={
                       p.bytesTotal > 0
                         ? `${fmtBytes(p.bytesProcessed)}/${fmtBytes(p.bytesTotal)}`
-                        : `${fmtNum(p.tuplesProcessed)} qator`
+                        : t("jobProgress.rows", {
+                            count: fmtNum(p.tuplesProcessed),
+                          })
                     }
                   />
                 ))}

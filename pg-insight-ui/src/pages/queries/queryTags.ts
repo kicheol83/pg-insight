@@ -1,4 +1,5 @@
 import type { BadgeVariant } from "@/components/ui";
+import type { MessageKey } from "@/i18n";
 
 export type QueryTag =
   | "slow"
@@ -11,13 +12,13 @@ export type QueryTag =
 
 export const TAG_META: Record<
   QueryTag,
-  { label: string; variant: BadgeVariant }
+  { labelKey: MessageKey; variant: BadgeVariant }
 > = {
-  slow: { label: "Slow", variant: "warning" },
-  "very-slow": { label: "Very slow", variant: "error" },
-  inconsistent: { label: "Inconsistent", variant: "purple" },
-  "low-cache": { label: "Low cache", variant: "warning" },
-  "high-rows": { label: "High rows", variant: "orange" },
-  frequent: { label: "Frequent", variant: "info" },
-  "write-heavy": { label: "Write heavy", variant: "purple" },
+  slow: { labelKey: "queries.tag.slow", variant: "warning" },
+  "very-slow": { labelKey: "queries.tag.verySlow", variant: "error" },
+  inconsistent: { labelKey: "queries.tag.inconsistent", variant: "purple" },
+  "low-cache": { labelKey: "queries.tag.lowCache", variant: "warning" },
+  "high-rows": { labelKey: "queries.tag.highRows", variant: "orange" },
+  frequent: { labelKey: "queries.tag.frequent", variant: "info" },
+  "write-heavy": { labelKey: "queries.tag.writeHeavy", variant: "purple" },
 };

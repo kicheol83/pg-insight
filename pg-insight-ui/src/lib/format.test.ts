@@ -106,3 +106,14 @@ describe("cn (classname merge)", () => {
     expect(cn("a", "b", false, undefined, "c")).toBe("a b c");
   });
 });
+
+describe("fmtRelative with a locale", () => {
+  it("formats in Korean", () => {
+    const d = new Date(Date.now() - 5 * 60_000);
+    expect(fmtRelative(d, "ko")).toBe("5분 전");
+  });
+  it("formats in English", () => {
+    const d = new Date(Date.now() - 2 * 3600_000);
+    expect(fmtRelative(d, "en")).toBe("2h ago");
+  });
+});

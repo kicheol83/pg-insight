@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { cn, copyToClipboard } from "@/lib/format";
+import { useI18n } from "@/i18n";
 
 export function CopyButton({
   text,
@@ -10,6 +11,7 @@ export function CopyButton({
   className?: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const { t } = useI18n();
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
     await copyToClipboard(text);
@@ -23,7 +25,7 @@ export function CopyButton({
         "p-1 rounded text-muted hover:text-primary transition-colors",
         className,
       )}
-      title="Copy to clipboard"
+      title={t("ui.copyToClipboard")}
     >
       {copied ? (
         <Check size={13} className="text-green-400" />

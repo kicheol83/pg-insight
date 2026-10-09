@@ -1,6 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/format";
 import { EmptyState, LoadingState } from "./States";
+import { useI18n } from "@/i18n";
 
 export interface Column<T> {
   key: string;
@@ -33,13 +34,14 @@ export function DataTable<T>({
   rowClassName,
   className,
 }: DataTableProps<T>) {
+  const { t } = useI18n();
   if (loading) return <LoadingState />;
   if (data.length === 0) {
     return (
       <EmptyState
         icon={emptyIcon}
-        title={emptyMsg ?? "No data"}
-        message="Data will appear here when available"
+        title={emptyMsg ?? t("common.noData")}
+        message={t("ui.emptyMessage")}
       />
     );
   }

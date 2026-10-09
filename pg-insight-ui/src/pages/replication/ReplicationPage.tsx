@@ -34,9 +34,11 @@ import { fmtBytes, tickTime, cn } from "@/lib/format";
 import { lagColor } from "@/lib/colors";
 import { ReplicaCard } from "./ReplicaCard";
 import type { ReplicationSlot } from "@/types/model";
+import { useI18n } from "@/i18n";
 
 export default function ReplicationPage() {
   const { activeTargetId } = useActiveTarget();
+  const { t } = useI18n();
 
   const { data, loading, refetch } = useQuery(
     () => liveApi.replication(activeTargetId ?? ""),
@@ -50,8 +52,8 @@ export default function ReplicationPage() {
   return (
     <>
       <TopBar
-        title="Replication"
-        subtitle="Streaming replication & WAL health"
+        title={t("nav.replication")}
+        subtitle={t("replication.subtitle")}
         actions={
           <Button
             size="sm"
@@ -60,7 +62,7 @@ export default function ReplicationPage() {
             onClick={refetch}
             loading={loading}
           >
-            Refresh
+            {t("common.refresh")}
           </Button>
         }
       />
@@ -69,26 +71,28 @@ export default function ReplicationPage() {
           <TargetSelector />
           {data && (
             <Badge variant={data.isPrimary ? "info" : "purple"} size="sm">
-              {data.isPrimary ? "PRIMARY" : "REPLICA"}
+              {data.isPrimary
+                ? t("replication.primary")
+                : t("replication.replica")}
             </Badge>
           )}
           {data?.hasLaggedReplicas && (
             <Badge variant="error" size="sm" dot>
-              Replica lagging
+              {t("replication.replicaLagging")}
             </Badge>
           )}
           {data?.hasInactiveSlots && (
             <Badge variant="warning" size="sm">
-              <AlertTriangle size={11} /> Inactive slots retaining WAL
+              <AlertTriangle size={11} />{" "}
+              {t("replication.inactiveSlotsRetainingWal")}
             </Badge>
           )}
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
           <Card padding="sm">
             <StatBox
-              label="Replicas"
+              label={t("replication.replicas")}
               value={data?.replicas?.length ?? "—"}
               icon={<Server size={13} />}
               loading={loading && !data}
@@ -96,7 +100,7 @@ export default function ReplicationPage() {
           </Card>
           <Card padding="sm">
             <StatBox
-              label="Max lag"
+              label={t("replication.maxLag")}
               value={
                 data ? (
                   <span className={lagColor(data.maxLagBytes)}>
@@ -112,7 +116,7 @@ export default function ReplicationPage() {
           </Card>
           <Card padding="sm">
             <StatBox
-              label="WAL size"
+              label={t("replication.walSize")}
               value={data ? fmtBytes(data.walSizeBytes) : "—"}
               icon={<Database size={13} />}
               loading={loading && !data}
@@ -120,7 +124,7 @@ export default function ReplicationPage() {
           </Card>
           <Card padding="sm">
             <StatBox
-              label="Slots (WAL retained)"
+              label={t("replication.slotsWalRetained")}
               value={data?.slots?.length ?? "—"}
               sub={
                 data?.totalWalRetained
@@ -133,10 +137,9 @@ export default function ReplicationPage() {
           </Card>
         </div>
 
-        {/* Lag trend */}
         <Card className="mb-5">
           <CardHeader
-            title="Replication lag trend (6h)"
+            title={t("replication.lagTrend")}
             icon={<GitBranch size={15} />}
           />
           <ResponsiveContainer width="100%" height={160}>
@@ -162,7 +165,7 @@ export default function ReplicationPage() {
               <Area
                 type="monotone"
                 dataKey="value"
-                name="Lag"
+                name={t("replication.lag")}
                 stroke="#14b8a6"
                 fill="url(#lagG)"
                 strokeWidth={2}
@@ -173,21 +176,22 @@ export default function ReplicationPage() {
         </Card>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-          {/* Replicas */}
           <Card>
             <CardHeader
-              title="Connected replicas"
+              title={t("replication.connectedReplicas")}
               icon={<Server size={15} />}
             />
             {!data?.replicas?.length ? (
               data?.isPrimary === false && data?.receiverInfo ? (
                 <div className="p-3 rounded-lg bg-[var(--bg-subtle)] border border-[var(--border)]">
                   <div className="text-xs font-medium text-primary mb-2">
-                    WAL Receiver (this is a replica)
+                    {t("replication.walReceiver")}
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <span className="text-muted">Status:</span>{" "}
+                      <span className="text-muted">
+                        {t("replication.statusLabel")}
+                      </span>{" "}
                       <Badge
                         variant={
                           data.receiverInfo.status === "streaming"
@@ -200,7 +204,9 @@ export default function ReplicationPage() {
                       </Badge>
                     </div>
                     <div>
-                      <span className="text-muted">Latency:</span>{" "}
+                      <span className="text-muted">
+                        {t("replication.latencyLabel")}
+                      </span>{" "}
                       <span className="text-primary font-medium">
                         {data.receiverInfo.latencyMs !== null
                           ? `${data.receiverInfo.latencyMs}ms`
@@ -208,7 +214,9 @@ export default function ReplicationPage() {
                       </span>
                     </div>
                     <div className="col-span-2">
-                      <span className="text-muted">Received LSN:</span>{" "}
+                      <span className="text-muted">
+                        {t("replication.receivedLsnLabel")}
+                      </span>{" "}
                       <span className="mono text-secondary">
                         {data.receiverInfo.receivedLsn ?? "—"}
                       </span>
@@ -218,8 +226,8 @@ export default function ReplicationPage() {
               ) : (
                 <EmptyState
                   icon={<Server size={28} />}
-                  title="No replicas connected"
-                  message="Streaming replicas will appear here automatically"
+                  title={t("replication.noReplicas")}
+                  message={t("replication.noReplicasMessage")}
                 />
               )
             ) : (
@@ -231,17 +239,16 @@ export default function ReplicationPage() {
             )}
           </Card>
 
-          {/* Slots */}
           <Card>
             <CardHeader
-              title="Replication slots"
-              subtitle="Inactive slots retain WAL and can fill disk"
+              title={t("replication.slots")}
+              subtitle={t("replication.slotsSubtitle")}
               icon={<Radio size={15} />}
             />
             {!data?.slots?.length ? (
               <EmptyState
                 icon={<Radio size={28} />}
-                title="No replication slots"
+                title={t("replication.noSlots")}
               />
             ) : (
               <DataTable<ReplicationSlot>
@@ -253,7 +260,7 @@ export default function ReplicationPage() {
                 columns={[
                   {
                     key: "name",
-                    header: "Slot",
+                    header: t("replication.colSlot"),
                     render: (s) => (
                       <div>
                         <span className="mono text-xs text-primary">
@@ -268,7 +275,7 @@ export default function ReplicationPage() {
                   },
                   {
                     key: "active",
-                    header: "Status",
+                    header: t("replication.colStatus"),
                     width: "90px",
                     render: (s) => (
                       <Badge
@@ -276,13 +283,15 @@ export default function ReplicationPage() {
                         size="xs"
                         dot={s.active}
                       >
-                        {s.active ? "active" : "inactive"}
+                        {s.active
+                          ? t("replication.slotActive")
+                          : t("replication.slotInactive")}
                       </Badge>
                     ),
                   },
                   {
                     key: "wal",
-                    header: "WAL retained",
+                    header: t("replication.colWalRetained"),
                     width: "110px",
                     align: "right",
                     render: (s) => (

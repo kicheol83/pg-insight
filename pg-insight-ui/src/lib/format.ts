@@ -30,9 +30,26 @@ export const fmtXidAge = (age: number): string => {
   return fmtNum(age);
 };
 
-export const fmtRelative = (d: Date | string): string => {
+const RELATIVE_UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+  ["day", 86400],
+  ["hour", 3600],
+  ["minute", 60],
+  ["second", 1],
+];
+
+export const fmtRelative = (d: Date | string, locale?: string): string => {
   const dt = typeof d === "string" ? new Date(d) : d;
   const s = Math.floor((Date.now() - dt.getTime()) / 1000);
+  if (locale) {
+    const rtf = new Intl.RelativeTimeFormat(locale, {
+      numeric: "auto",
+      style: "narrow",
+    });
+    if (s < 5) return rtf.format(0, "second");
+    const [unit, size] =
+      RELATIVE_UNITS.find(([, sec]) => s >= sec) ?? RELATIVE_UNITS[3];
+    return rtf.format(-Math.floor(s / size), unit);
+  }
   if (s < 5) return "just now";
   if (s < 60) return `${s}s ago`;
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;

@@ -15,6 +15,7 @@ PostgreSQL 모니터링 서비스입니다. 가입한 뒤 자신의 PostgreSQL �
 - 백업: `pg_dump` (관리자만)
 - 알림: 15초마다 규칙 평가, 웹훅
 - Health Score와 보안 점검
+- UI 언어: 한국어(기본), English, O'zbekcha
 
 ## 기술 스택
 
@@ -89,7 +90,7 @@ cd ..\pg-insight-ui
 npx vitest run
 ```
 
-Backend 182개, Frontend 41개.
+Backend 188개, Frontend 49개.
 
 ## 배포
 

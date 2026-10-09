@@ -32,9 +32,11 @@ import { ExplainViewer } from "./ExplainViewer";
 import { QueryDetailModal } from "./QueryDetailModal";
 import { TAG_META, type QueryTag } from "./queryTags";
 import type { QueryStat } from "@/types/model";
+import { useI18n } from "@/i18n";
 
 export default function QueriesPage() {
   const { activeTargetId } = useActiveTarget();
+  const { t } = useI18n();
   const [tagFilter, setTagFilter] = useState<QueryTag | "">("");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"mean" | "total" | "calls" | "max">(
@@ -70,8 +72,8 @@ export default function QueriesPage() {
 
   const tagCounts = (data?.queries ?? []).reduce(
     (acc, q) => {
-      q.tags.forEach((t) => {
-        acc[t] = (acc[t] ?? 0) + 1;
+      q.tags.forEach((tag) => {
+        acc[tag] = (acc[tag] ?? 0) + 1;
       });
       return acc;
     },
@@ -81,8 +83,8 @@ export default function QueriesPage() {
   return (
     <>
       <TopBar
-        title="Queries"
-        subtitle="pg_stat_statements analysis & EXPLAIN ANALYZE"
+        title={t("nav.queries")}
+        subtitle={t("queries.subtitle")}
         actions={
           <Button
             size="sm"
@@ -91,7 +93,7 @@ export default function QueriesPage() {
             onClick={refetch}
             loading={loading}
           >
-            Refresh
+            {t("common.refresh")}
           </Button>
         }
       />
@@ -103,7 +105,7 @@ export default function QueriesPage() {
         <Tabs defaultValue="slow">
           <TabList>
             <Tab value="slow" icon={<Zap size={13} />}>
-              Slow queries
+              {t("queries.slowQueries")}
             </Tab>
             <Tab value="explain" icon={<Play size={13} />}>
               EXPLAIN ANALYZE
@@ -114,7 +116,7 @@ export default function QueriesPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
               <Card padding="sm">
                 <StatBox
-                  label="Unique queries"
+                  label={t("queries.uniqueQueries")}
                   value={data?.count ?? "—"}
                   icon={<Hash size={13} />}
                   loading={loading && !data}
@@ -122,7 +124,7 @@ export default function QueriesPage() {
               </Card>
               <Card padding="sm">
                 <StatBox
-                  label="Slow (>1s)"
+                  label={t("queries.slowOver1s")}
                   value={(data?.queries ?? []).filter((q) => q.isSlow).length}
                   icon={<Zap size={13} className="text-yellow-400" />}
                   loading={loading && !data}
@@ -130,7 +132,7 @@ export default function QueriesPage() {
               </Card>
               <Card padding="sm">
                 <StatBox
-                  label="Inconsistent"
+                  label={t("queries.tag.inconsistent")}
                   value={tagCounts["inconsistent"] ?? 0}
                   icon={<AlertTriangle size={13} className="text-orange-400" />}
                   loading={loading && !data}
@@ -138,7 +140,7 @@ export default function QueriesPage() {
               </Card>
               <Card padding="sm">
                 <StatBox
-                  label="Low cache hit"
+                  label={t("queries.lowCacheHit")}
                   value={tagCounts["low-cache"] ?? 0}
                   icon={<TrendingDown size={13} className="text-red-400" />}
                   loading={loading && !data}
@@ -148,7 +150,9 @@ export default function QueriesPage() {
 
             {/* Tag pills */}
             <div className="flex items-center gap-2 mb-4 flex-wrap">
-              <span className="text-xs text-muted mr-1">Filter:</span>
+              <span className="text-xs text-muted mr-1">
+                {t("queries.filter")}
+              </span>
               <button
                 onClick={() => setTagFilter("")}
                 className={cn(
@@ -158,7 +162,7 @@ export default function QueriesPage() {
                     : "border-[var(--border)] text-secondary hover:border-brand-500 hover:text-brand-500",
                 )}
               >
-                All ({data?.queries?.length ?? 0})
+                {t("queries.all", { count: data?.queries?.length ?? 0 })}
               </button>
               {(
                 Object.entries(TAG_META) as Array<
@@ -178,7 +182,7 @@ export default function QueriesPage() {
                         : "border-[var(--border)] text-secondary hover:border-brand-500 hover:text-brand-500",
                     )}
                   >
-                    {meta.label} ({count})
+                    {t(meta.labelKey)} ({count})
                   </button>
                 );
               })}
@@ -194,7 +198,7 @@ export default function QueriesPage() {
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search query text…"
+                  placeholder={t("queries.searchPlaceholder")}
                   className="input pl-8 text-xs w-full"
                 />
               </div>
@@ -203,10 +207,10 @@ export default function QueriesPage() {
                 onChange={(v) => setSortBy(v as typeof sortBy)}
                 className="w-44"
                 options={[
-                  { value: "mean", label: "Sort: Mean time" },
-                  { value: "total", label: "Sort: Total time" },
-                  { value: "calls", label: "Sort: Calls" },
-                  { value: "max", label: "Sort: Max time" },
+                  { value: "mean", label: t("queries.sort.mean") },
+                  { value: "total", label: t("queries.sort.total") },
+                  { value: "calls", label: t("queries.sort.calls") },
+                  { value: "max", label: t("queries.sort.max") },
                 ]}
               />
             </div>
@@ -216,7 +220,7 @@ export default function QueriesPage() {
                 loading={loading && !data}
                 data={filtered}
                 keyFn={(q) => q.queryId}
-                emptyMsg="No queries match the filter"
+                emptyMsg={t("queries.noMatch")}
                 emptyIcon={<Zap size={32} />}
                 onRowClick={(q) => {
                   setSelected(q);
@@ -225,7 +229,7 @@ export default function QueriesPage() {
                 columns={[
                   {
                     key: "query",
-                    header: "Query",
+                    header: t("queries.col.query"),
                     render: (q) => (
                       <div className="max-w-[340px]">
                         <div className="mono text-xs text-secondary truncate">
@@ -236,7 +240,7 @@ export default function QueriesPage() {
                             const meta = TAG_META[tag as QueryTag];
                             return meta ? (
                               <Badge key={tag} variant={meta.variant} size="xs">
-                                {meta.label}
+                                {t(meta.labelKey)}
                               </Badge>
                             ) : null;
                           })}
@@ -246,7 +250,7 @@ export default function QueriesPage() {
                   },
                   {
                     key: "calls",
-                    header: "Calls",
+                    header: t("queries.calls"),
                     width: "80px",
                     align: "right",
                     render: (q) => (
@@ -262,7 +266,7 @@ export default function QueriesPage() {
                   },
                   {
                     key: "mean",
-                    header: "Mean",
+                    header: t("queries.col.mean"),
                     width: "90px",
                     align: "right",
                     render: (q) => (
@@ -282,7 +286,7 @@ export default function QueriesPage() {
                   },
                   {
                     key: "max",
-                    header: "Max",
+                    header: t("queries.col.max"),
                     width: "90px",
                     align: "right",
                     render: (q) => (
@@ -293,7 +297,7 @@ export default function QueriesPage() {
                   },
                   {
                     key: "cache",
-                    header: "Cache hit",
+                    header: t("queries.cacheHit"),
                     width: "90px",
                     align: "right",
                     render: (q) => (
@@ -313,7 +317,7 @@ export default function QueriesPage() {
                   },
                   {
                     key: "rows",
-                    header: "Rows/call",
+                    header: t("queries.rowsPerCall"),
                     width: "90px",
                     align: "right",
                     render: (q) => (
@@ -339,7 +343,7 @@ export default function QueriesPage() {
               {activeTargetId ? (
                 <ExplainViewer targetId={activeTargetId} />
               ) : (
-                <EmptyState title="Select a target first" />
+                <EmptyState title={t("queries.selectTargetFirst")} />
               )}
             </Card>
           </TabPanel>

@@ -16,9 +16,11 @@ import { useActiveTarget } from "@/store/app";
 import { liveApi } from "@/api/endpoints";
 import { fmtRelative } from "@/lib/format";
 import { BlockingChainCard } from "./BlockingChainCard";
+import { useI18n } from "@/i18n";
 
 export default function LocksPage() {
   const { activeTargetId } = useActiveTarget();
+  const { t, locale } = useI18n();
 
   const {
     data: lockStats,
@@ -41,23 +43,25 @@ export default function LocksPage() {
   return (
     <>
       <TopBar
-        title="Locks"
+        title={t("nav.locks")}
         subtitle={
           updatedAt
-            ? `Updated ${fmtRelative(updatedAt)}`
-            : "Live lock monitoring"
+            ? t("locks.updated", { time: fmtRelative(updatedAt, locale) })
+            : t("locks.subtitle")
         }
         actions={
           <div className="flex items-center gap-2">
             <LiveDot size="xs" />
-            <span className="text-xs text-muted">3s refresh</span>
+            <span className="text-xs text-muted">
+              {t("locks.refreshEvery3s")}
+            </span>
             <Button
               size="sm"
               variant="ghost"
               icon={<RefreshCw size={13} />}
               onClick={refetch}
             >
-              Refresh
+              {t("common.refresh")}
             </Button>
           </div>
         }
@@ -67,12 +71,12 @@ export default function LocksPage() {
           <TargetSelector />
           {chains?.hasCritical && (
             <Badge variant="error" size="sm" dot>
-              Critical lock detected
+              {t("locks.criticalDetected")}
             </Badge>
           )}
           {lockStats?.hasDeadlockRisk && (
             <Badge variant="error" size="sm">
-              <Skull size={11} /> Deadlock risk
+              <Skull size={11} /> {t("locks.deadlockRisk")}
             </Badge>
           )}
         </div>
@@ -81,7 +85,7 @@ export default function LocksPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
           <Card padding="sm">
             <StatBox
-              label="Total locks"
+              label={t("locks.totalLocks")}
               value={lockStats?.totalLocks ?? "—"}
               icon={<Lock size={14} />}
               loading={statsLoading && !lockStats}
@@ -96,7 +100,7 @@ export default function LocksPage() {
             }
           >
             <StatBox
-              label="Waiting locks"
+              label={t("locks.waitingLocks")}
               value={lockStats?.waitingLocks ?? "—"}
               icon={
                 <AlertTriangle
@@ -109,14 +113,14 @@ export default function LocksPage() {
           </Card>
           <Card padding="sm">
             <StatBox
-              label="Blocking chains"
+              label={t("locks.blockingChains")}
               value={chains?.count ?? "—"}
               loading={chainsLoading && !chains}
             />
           </Card>
           <Card padding="sm">
             <StatBox
-              label="Deadlocks (total)"
+              label={t("locks.deadlocksTotal")}
               value={lockStats?.deadlocksTotal ?? "—"}
               loading={statsLoading && !lockStats}
             />
@@ -128,8 +132,8 @@ export default function LocksPage() {
           <div className="xl:col-span-2">
             <Card>
               <CardHeader
-                title="Blocking chains"
-                subtitle="Who is blocking whom"
+                title={t("locks.blockingChains")}
+                subtitle={t("locks.whoBlocksWhom")}
                 icon={<Lock size={15} />}
                 action={
                   chains?.chains?.length ? (
@@ -138,7 +142,7 @@ export default function LocksPage() {
                     </Badge>
                   ) : (
                     <Badge variant="success" size="xs">
-                      None
+                      {t("locks.none")}
                     </Badge>
                   )
                 }
@@ -148,8 +152,8 @@ export default function LocksPage() {
               ) : !chains?.chains?.length ? (
                 <EmptyState
                   icon={<Lock size={28} />}
-                  title="No blocking chains detected"
-                  message="All connections are running freely"
+                  title={t("locks.noChains")}
+                  message={t("locks.noChainsMessage")}
                 />
               ) : (
                 <div className="space-y-3">
@@ -163,9 +167,12 @@ export default function LocksPage() {
 
           {/* Lock modes */}
           <Card>
-            <CardHeader title="Lock modes" icon={<Lock size={15} />} />
+            <CardHeader
+              title={t("locks.lockModes")}
+              icon={<Lock size={15} />}
+            />
             {sortedByMode.length === 0 ? (
-              <EmptyState title="No locks" />
+              <EmptyState title={t("locks.noLocks")} />
             ) : (
               <div className="space-y-2">
                 {sortedByMode.map(([mode, count]) => {

@@ -6,6 +6,7 @@ import { targetsApi } from "@/api/endpoints";
 import { useActiveTarget } from "@/store/app";
 import type { ConnectionTestResult } from "@/types/model";
 import { cn } from "@/lib/format";
+import { useI18n } from "@/i18n";
 
 interface AddTargetModalProps {
   open: boolean;
@@ -19,6 +20,7 @@ export function AddTargetModal({
   onAdded,
 }: AddTargetModalProps) {
   const toast = useToast();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { setActiveTarget } = useActiveTarget();
   const [loading, setLoading] = useState(false);
@@ -65,8 +67,8 @@ export function AddTargetModal({
       const target = await targetsApi.create({ name: form.name, ...payload() });
       toast({
         type: "success",
-        title: "Target added",
-        message: `${form.name} is now being monitored`,
+        title: t("targets.added"),
+        message: t("targets.addedMessage", { name: form.name }),
       });
       setActiveTarget(target.id);
       onAdded();
@@ -75,7 +77,7 @@ export function AddTargetModal({
     } catch (err) {
       toast({
         type: "error",
-        title: "Failed to add target",
+        title: t("targets.addFailed"),
         message: (err as Error).message,
       });
     } finally {
@@ -92,12 +94,12 @@ export function AddTargetModal({
     <Modal
       open={open}
       onClose={handleClose}
-      title="Add PostgreSQL Target"
+      title={t("target.add")}
       size="lg"
       footer={
         <div className="flex gap-2 w-full">
           <Button variant="ghost" onClick={handleClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <div className="flex-1" />
           <Button
@@ -105,7 +107,7 @@ export function AddTargetModal({
             onClick={handleTest}
             loading={loading && !testResult?.success}
           >
-            Test connection
+            {t("targets.testConnection")}
           </Button>
           {testResult?.success && (
             <Button
@@ -114,7 +116,7 @@ export function AddTargetModal({
               onClick={handleAdd}
               loading={loading}
             >
-              Add target
+              {t("targets.add")}
             </Button>
           )}
         </div>
@@ -122,40 +124,40 @@ export function AddTargetModal({
     >
       <div className="space-y-4">
         <Input
-          label="Display name"
-          placeholder="Production DB"
+          label={t("targets.displayName")}
+          placeholder={t("targets.displayNamePlaceholder")}
           value={form.name}
           onChange={set("name")}
         />
         <div className="grid grid-cols-3 gap-3">
           <div className="col-span-2">
             <Input
-              label="Host"
-              placeholder="localhost or IP"
+              label={t("targets.host")}
+              placeholder={t("targets.hostPlaceholder")}
               value={form.host}
               onChange={set("host")}
             />
           </div>
           <Input
-            label="Port"
+            label={t("targets.port")}
             type="number"
             value={form.port}
             onChange={set("port")}
           />
         </div>
         <Input
-          label="Database"
+          label={t("targets.database")}
           value={form.database}
           onChange={set("database")}
         />
         <div className="grid grid-cols-2 gap-3">
           <Input
-            label="Username"
+            label={t("targets.username")}
             value={form.username}
             onChange={set("username")}
           />
           <Input
-            label="Password"
+            label={t("targets.password")}
             type="password"
             value={form.password}
             onChange={set("password")}
@@ -163,16 +165,16 @@ export function AddTargetModal({
         </div>
         <div>
           <label className="block text-xs font-medium text-secondary mb-1.5">
-            SSL Mode
+            {t("targets.sslMode")}
           </label>
           <Select
             value={form.sslMode}
             onChange={(v) => setForm((f) => ({ ...f, sslMode: v }))}
             options={[
-              { value: "disable", label: "Disable (no TLS)" },
-              { value: "require", label: "Require (default)" },
-              { value: "verify-ca", label: "Verify CA" },
-              { value: "verify-full", label: "Verify Full" },
+              { value: "disable", label: t("targets.ssl.disable") },
+              { value: "require", label: t("targets.ssl.require") },
+              { value: "verify-ca", label: t("targets.ssl.verifyCa") },
+              { value: "verify-full", label: t("targets.ssl.verifyFull") },
             ]}
           />
         </div>
@@ -194,11 +196,13 @@ export function AddTargetModal({
                 />
                 <div>
                   <p className="font-medium text-green-700 dark:text-green-400">
-                    Connection successful!
+                    {t("targets.testSuccess")}
                   </p>
                   <div className="text-xs text-green-600 dark:text-green-500 mt-1">
-                    PostgreSQL {testResult.pgVersion} · latency{" "}
-                    {testResult.latencyMs}ms
+                    {t("targets.testDetails", {
+                      version: testResult.pgVersion ?? "",
+                      latency: testResult.latencyMs ?? "",
+                    })}
                   </div>
                 </div>
               </div>
@@ -207,7 +211,7 @@ export function AddTargetModal({
                 <XCircle size={15} className="text-red-400 mt-0.5 shrink-0" />
                 <div>
                   <p className="font-medium text-red-600 dark:text-red-400">
-                    Connection failed
+                    {t("targets.testFailed")}
                   </p>
                   <p className="text-xs text-red-500 dark:text-red-400 mt-1 mono">
                     {testResult.errorMessage}
@@ -219,7 +223,7 @@ export function AddTargetModal({
         )}
 
         <div className="rounded-lg p-3 bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 text-xs text-blue-600 dark:text-blue-400">
-          <p className="font-medium mb-1">Required PostgreSQL permission:</p>
+          <p className="font-medium mb-1">{t("targets.requiredPermission")}</p>
           <code className="block text-[11px] mono bg-blue-100 dark:bg-blue-900/30 rounded px-2 py-1">
             GRANT pg_monitor TO {form.username || "your_user"};
           </code>

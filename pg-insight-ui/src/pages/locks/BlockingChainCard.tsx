@@ -3,9 +3,18 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn, fmtMs } from "@/lib/format";
 import { severityBadge } from "@/lib/colors";
 import type { BlockingChain } from "@/types/model";
+import { useI18n, type MessageKey } from "@/i18n";
+
+const SEVERITY_LABEL: Record<string, MessageKey> = {
+  critical: "locks.severity.critical",
+  high: "locks.severity.high",
+  medium: "locks.severity.medium",
+  low: "locks.severity.low",
+};
 
 export function BlockingChainCard({ chain }: { chain: BlockingChain }) {
   const [expanded, setExpanded] = useState(false);
+  const { t } = useI18n();
 
   return (
     <div
@@ -31,7 +40,9 @@ export function BlockingChainCard({ chain }: { chain: BlockingChain }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-bold text-red-400">BLOCKER</span>
+            <span className="text-xs font-bold text-red-400">
+              {t("locks.blocker")}
+            </span>
             <span className="text-xs text-muted mono">
               PID {chain.blockerPid}
             </span>
@@ -41,7 +52,9 @@ export function BlockingChainCard({ chain }: { chain: BlockingChain }) {
                 severityBadge(chain.severity),
               )}
             >
-              {chain.severity}
+              {SEVERITY_LABEL[chain.severity]
+                ? t(SEVERITY_LABEL[chain.severity])
+                : chain.severity}
             </span>
             <span className="text-xs text-muted ml-auto">
               {fmtMs(chain.blockerQueryMs)}
@@ -53,18 +66,23 @@ export function BlockingChainCard({ chain }: { chain: BlockingChain }) {
           <div className="flex gap-3 mt-1">
             {chain.lockedRelation && (
               <span className="text-[10px] text-muted">
-                Table:{" "}
+                {t("locks.table")}{" "}
                 <span className="mono text-secondary">
                   {chain.lockedRelation}
                 </span>
               </span>
             )}
             <span className="text-[10px] text-muted">
-              Lock: <span className="text-secondary">{chain.lockMode}</span>
+              {t("locks.lock")}{" "}
+              <span className="text-secondary">{chain.lockMode}</span>
             </span>
             <span className="text-[10px] text-yellow-400">
-              {chain.waiters.length}{" "}
-              {chain.waiters.length === 1 ? "waiter" : "waiters"}
+              {t(
+                chain.waiters.length === 1
+                  ? "locks.waiterOne"
+                  : "locks.waiterMany",
+                { count: chain.waiters.length },
+              )}
             </span>
           </div>
         </div>
@@ -82,7 +100,7 @@ export function BlockingChainCard({ chain }: { chain: BlockingChain }) {
             >
               <div className="pl-5 shrink-0">
                 <div className="text-[10px] font-bold text-yellow-400">
-                  WAITING
+                  {t("locks.waiting")}
                 </div>
                 <div className="text-[10px] text-muted mono">
                   PID {w.waiterPid}
@@ -94,10 +112,11 @@ export function BlockingChainCard({ chain }: { chain: BlockingChain }) {
                 </div>
                 <div className="flex gap-3">
                   <span className="text-[10px] text-muted">
-                    Wants: <span className="text-secondary">{w.lockMode}</span>
+                    {t("locks.wants")}{" "}
+                    <span className="text-secondary">{w.lockMode}</span>
                   </span>
                   <span className="text-[10px] text-red-400 font-medium">
-                    Waiting {fmtMs(w.waitMs)}
+                    {t("locks.waitingFor", { duration: fmtMs(w.waitMs) })}
                   </span>
                 </div>
               </div>

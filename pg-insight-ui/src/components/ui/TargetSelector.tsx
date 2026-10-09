@@ -13,6 +13,7 @@ import { useQuery } from "@/hooks/useQuery";
 import { useActiveTarget } from "@/store/app";
 import { targetsApi } from "@/api/endpoints";
 import type { Target } from "@/types/model";
+import { useI18n } from "@/i18n";
 
 function StatusIcon({ status }: { status: string }) {
   switch (status) {
@@ -32,6 +33,7 @@ export function TargetSelector() {
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { activeTargetId, setActiveTarget } = useActiveTarget();
+  const { t } = useI18n();
 
   const { data } = useQuery<Target[]>(() => targetsApi.list(), {
     refreshInterval: 30_000,
@@ -78,7 +80,7 @@ export function TargetSelector() {
               </div>
             </>
           ) : (
-            <span className="text-xs text-muted">Select a target…</span>
+            <span className="text-xs text-muted">{t("target.select")}</span>
           )}
         </div>
         <ChevronDown
@@ -98,7 +100,7 @@ export function TargetSelector() {
                 size={24}
                 className="text-slate-300 dark:text-slate-600 mx-auto mb-2"
               />
-              <p className="text-xs text-muted">No targets added yet</p>
+              <p className="text-xs text-muted">{t("target.none")}</p>
             </div>
           ) : (
             <div className="py-1 max-h-80 overflow-y-auto">
@@ -139,7 +141,7 @@ export function TargetSelector() {
               className="w-full flex items-center gap-2 px-3 py-2 text-xs text-brand-500 hover:bg-brand-500/10 rounded-md transition-colors"
             >
               <Plus size={13} />
-              Add PostgreSQL target
+              {t("target.add")}
             </button>
           </div>
         </div>

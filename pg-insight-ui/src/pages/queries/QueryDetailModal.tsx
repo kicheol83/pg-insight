@@ -3,6 +3,7 @@ import { Modal, Badge, CopyButton } from "@/components/ui";
 import { fmtMs, fmtNum } from "@/lib/format";
 import type { QueryStat } from "@/types/model";
 import { TAG_META, type QueryTag } from "./queryTags";
+import { useI18n } from "@/i18n";
 
 interface QueryDetailModalProps {
   query: QueryStat | null;
@@ -15,14 +16,20 @@ export function QueryDetailModal({
   open,
   onClose,
 }: QueryDetailModalProps) {
+  const { t } = useI18n();
   if (!query) return null;
   return (
-    <Modal open={open} onClose={onClose} title="Query Details" size="xl">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={t("queries.detailTitle")}
+      size="xl"
+    >
       <div className="space-y-4">
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-secondary">
-              Query (normalized)
+              {t("queries.normalized")}
             </span>
             <CopyButton text={query.queryText} />
           </div>
@@ -33,14 +40,17 @@ export function QueryDetailModal({
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Calls", value: fmtNum(query.calls) },
-            { label: "Mean time", value: fmtMs(query.meanTimeMs) },
-            { label: "Max time", value: fmtMs(query.maxTimeMs) },
-            { label: "Std dev", value: fmtMs(query.stddevTimeMs) },
-            { label: "Total time", value: fmtMs(query.totalTimeMs) },
-            { label: "Rows/call", value: fmtNum(query.rowsPerCall) },
+            { label: t("queries.calls"), value: fmtNum(query.calls) },
+            { label: t("queries.meanTime"), value: fmtMs(query.meanTimeMs) },
+            { label: t("queries.maxTime"), value: fmtMs(query.maxTimeMs) },
+            { label: t("queries.stdDev"), value: fmtMs(query.stddevTimeMs) },
+            { label: t("queries.totalTime"), value: fmtMs(query.totalTimeMs) },
             {
-              label: "Cache hit",
+              label: t("queries.rowsPerCall"),
+              value: fmtNum(query.rowsPerCall),
+            },
+            {
+              label: t("queries.cacheHit"),
               value: `${(query.cacheHitRatio * 100).toFixed(1)}%`,
             },
           ].map((s) => (
@@ -60,7 +70,7 @@ export function QueryDetailModal({
               const meta = TAG_META[tag as QueryTag];
               return meta ? (
                 <Badge key={tag} variant={meta.variant} size="xs">
-                  {meta.label}
+                  {t(meta.labelKey)}
                 </Badge>
               ) : null;
             })}
@@ -68,7 +78,7 @@ export function QueryDetailModal({
         )}
 
         <div className="text-[10px] text-muted mono flex items-center gap-2">
-          <Hash size={10} /> Query ID: {query.queryId}
+          <Hash size={10} /> {t("queries.queryId")}: {query.queryId}
         </div>
       </div>
     </Modal>
