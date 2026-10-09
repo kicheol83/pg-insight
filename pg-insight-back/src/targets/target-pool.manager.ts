@@ -7,6 +7,7 @@ import {
 import { Pool, PoolClient, PoolConfig } from 'pg';
 import { PrismaService } from '../database/prisma.service';
 import { decrypt, getEncryptionKey } from '../common/crypto.util';
+import { TargetHostPolicy, withServername } from './target-host.policy';
 
 export interface TargetPoolEntry {
   pool: Pool;
@@ -53,7 +54,10 @@ export class TargetPoolManager implements OnModuleInit, OnModuleDestroy {
 
   private readonly creating = new Set<string>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly hostPolicy: TargetHostPolicy,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     this.logger.log('🔌 TargetPoolManager initializing...');
@@ -99,6 +103,22 @@ export class TargetPoolManager implements OnModuleInit, OnModuleDestroy {
       password,
       ssl: this.buildSslConfig(target.sslMode),
     });
+  }
+
+  private async isTrusted(targetId: string): Promise<boolean> {
+    const db = this.prisma as unknown as Record<
+      string,
+      {
+        findUnique: (
+          args: unknown,
+        ) => Promise<{ createdByUser: { role: string } | null } | null>;
+      }
+    >;
+    const target = await db['target'].findUnique({
+      where: { id: targetId },
+      select: { createdByUser: { select: { role: true } } },
+    });
+    return target?.createdByUser?.role === 'admin';
   }
 
   private targetDelegate(): {
@@ -157,8 +177,14 @@ export class TargetPoolManager implements OnModuleInit, OnModuleDestroy {
     };
 
     try {
+      const resolved = await this.hostPolicy.resolve(
+        String(config.host),
+        await this.isTrusted(targetId),
+      );
       const pool = new Pool({
         ...config,
+        host: resolved.address,
+        ssl: withServername(config.ssl, resolved.servername),
         min: 1,
         max: 5,
         idleTimeoutMillis: 30_000,

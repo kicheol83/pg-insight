@@ -8,9 +8,7 @@ import {
   Body,
   HttpCode,
   HttpStatus,
-  UseGuards,
 } from '@nestjs/common';
-import { AdminGuard } from '../auth/admin.guard';
 import { TargetAccess } from '../auth/target-access.decorator';
 import {
   ApiTags,
@@ -162,19 +160,20 @@ export class TargetsController {
 
   // POST /targets/test — connection test (SAQLASHDAN OLDIN)
   // :id bo'lmasin deb /test birinchi keladi
-  @UseGuards(AdminGuard)
   @Post('test')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Test PostgreSQL connection without saving',
   })
   @ApiBody({ type: TestConnectionDto })
-  async testConnection(@Body() dto: TestConnectionDto) {
-    return this.targetsService.testConnection(dto);
+  async testConnection(
+    @Body() dto: TestConnectionDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.targetsService.testConnection(dto, user.role === 'admin');
   }
 
   // POST /targets — create
-  @UseGuards(AdminGuard)
   @Post()
   @ApiOperation({
     summary: 'Add a new PostgreSQL target',
@@ -188,7 +187,7 @@ export class TargetsController {
   })
   @ApiResponse({ status: 409 })
   async create(@Body() dto: CreateTargetDto, @CurrentUser() user: AuthUser) {
-    const target = await this.targetsService.create(dto, user.id);
+    const target = await this.targetsService.create(dto, user);
     await this.audit.record({
       action: 'target.create',
       userId: user.id,

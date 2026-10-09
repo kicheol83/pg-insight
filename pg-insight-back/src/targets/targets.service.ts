@@ -4,11 +4,14 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Pool, PoolClient } from 'pg';
 import { encrypt, decrypt, getEncryptionKey } from '../common/crypto.util';
 import { PrismaService } from '../database/prisma.service';
 import { TargetPoolManager } from './target-pool.manager';
+import { TargetHostPolicy, withServername } from './target-host.policy';
 import { CollectorOrchestrator } from '../collector/collector.orchestrator';
 
 export interface CreateTargetDto {
@@ -70,6 +73,8 @@ export class TargetsService {
     private readonly prisma: PrismaService,
     private readonly poolManager: TargetPoolManager,
     private readonly orchestrator: CollectorOrchestrator,
+    private readonly hostPolicy: TargetHostPolicy,
+    private readonly config: ConfigService,
   ) {
     this.encryptionKey = getEncryptionKey();
 
@@ -157,10 +162,17 @@ export class TargetsService {
 
   async create(
     dto: CreateTargetDto,
-    createdByUserId?: string,
+    actor: { id: string; role: string },
   ): Promise<TargetStatus> {
+    const trusted = actor.role === 'admin';
+    const createdByUserId = actor.id;
+
+    if (!trusted) {
+      await this.assertWithinQuota(actor.id);
+    }
+
     // 1. Connection test avval
-    const testResult = await this.testConnection(dto);
+    const testResult = await this.testConnection(dto, trusted);
     if (!testResult.success) {
       throw new BadRequestException(
         `Cannot connect to PostgreSQL: ${testResult.errorMessage}`,
@@ -317,18 +329,22 @@ export class TargetsService {
     return { message: `Target ${id} removed` };
   }
 
-  async testConnection(dto: {
-    host: string;
-    port?: number;
-    database: string;
-    username: string;
-    password: string;
-    sslMode?: string;
-  }): Promise<ConnectionTestResult> {
+  async testConnection(
+    dto: {
+      host: string;
+      port?: number;
+      database: string;
+      username: string;
+      password: string;
+      sslMode?: string;
+    },
+    trusted = false,
+  ): Promise<ConnectionTestResult> {
+    const resolved = await this.hostPolicy.resolve(dto.host, trusted);
     const startTime = Date.now();
 
     const testPool = new Pool({
-      host: dto.host,
+      host: resolved.address,
       port: dto.port ?? 5432,
       database: dto.database,
       user: dto.username,
@@ -336,7 +352,10 @@ export class TargetsService {
       max: 1,
       connectionTimeoutMillis: 5_000,
       idleTimeoutMillis: 1_000,
-      ssl: this.buildSslConfig(dto.sslMode),
+      ssl: withServername(
+        this.buildSslConfig(dto.sslMode),
+        resolved.servername,
+      ),
       application_name: 'pg-insight-test',
     });
 
@@ -378,6 +397,22 @@ export class TargetsService {
     } finally {
       client?.release();
       await testPool.end().catch(() => {});
+    }
+  }
+
+  private async assertWithinQuota(userId: string): Promise<void> {
+    const quota = Number(this.config.get('TARGET_QUOTA_PER_USER') ?? 3);
+    const db = this.prisma as unknown as Record<
+      string,
+      { count: (args: unknown) => Promise<number> }
+    >;
+    const owned = await db['target'].count({
+      where: { createdByUserId: userId, isActive: true },
+    });
+    if (owned >= quota) {
+      throw new ForbiddenException(
+        `Target limit reached: ${quota} active targets per account`,
+      );
     }
   }
 

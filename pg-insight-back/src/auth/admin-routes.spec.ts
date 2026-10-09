@@ -44,6 +44,8 @@ const OPEN_WITHOUT_TARGET = new Set([
   'AuthController.refresh',
   'AuthController.logout',
   'AuthController.registerFirst',
+  'TargetsController.create',
+  'TargetsController.testConnection',
 ]);
 
 const ADMIN_ONLY = new Set([
@@ -51,8 +53,6 @@ const ADMIN_ONLY = new Set([
   'BackupController.start',
   'BackupController.download',
   'BackupController.remove',
-  'TargetsController.create',
-  'TargetsController.testConnection',
 ]);
 
 function routes() {
