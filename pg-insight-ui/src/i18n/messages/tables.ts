@@ -173,4 +173,73 @@ export const tables = {
   "tables.colScans": { ko: "스캔", en: "Scans", uz: "Skanlar" },
   "tables.colSize": { ko: "크기", en: "Size", uz: "Hajm" },
   "tables.colColumns": { ko: "컬럼", en: "Columns", uz: "Ustunlar" },
+  "tables.bloatTitle": {
+    ko: "테이블 bloat 측정",
+    en: "Table bloat measurement",
+    uz: "Jadval bloat o'lchovi",
+  },
+  "tables.bloatSubtitle": {
+    ko: "죽은 튜플과 빈 공간이 차지하는 실제 크기",
+    en: "Real space taken by dead tuples and free space",
+    uz: "O'lik tuple va bo'sh joy egallagan haqiqiy hajm",
+  },
+  "tables.bloatMeasure": { ko: "측정", en: "Measure", uz: "O'lchash" },
+  "tables.bloatRemeasure": {
+    ko: "다시 측정",
+    en: "Measure again",
+    uz: "Qayta o'lchash",
+  },
+  "tables.bloatIntro": {
+    ko: "죽은 튜플이 많은 상위 10개 테이블을 pgstattuple_approx로 측정합니다. visibility map 덕분에 all-visible 페이지는 읽지 않고, 테이블당 5초 제한이 있습니다.",
+    en: "Measures the 10 tables with the most dead tuples using pgstattuple_approx. All-visible pages are skipped thanks to the visibility map, with a 5 s limit per table.",
+    uz: "O'lik tuple'i eng ko'p 10 ta jadvalni pgstattuple_approx bilan o'lchaydi. Visibility map tufayli all-visible sahifalar o'qilmaydi, har jadvalga 5 soniya chegara bor.",
+  },
+  "tables.bloatMethodApprox": {
+    ko: "pgstattuple_approx 측정",
+    en: "Measured with pgstattuple_approx",
+    uz: "pgstattuple_approx bilan o'lchandi",
+  },
+  "tables.bloatMethodEstimate": {
+    ko: "n_dead_tup 기반 추정",
+    en: "Estimated from n_dead_tup",
+    uz: "n_dead_tup bo'yicha taxmin",
+  },
+  "tables.bloatMethodSkipped": {
+    ko: "8 GB 초과, 추정값",
+    en: "Over 8 GB, estimated",
+    uz: "8 GB dan katta, taxmin",
+  },
+  "tables.bloatMethodFailed": {
+    ko: "측정 실패, 추정값",
+    en: "Measurement failed, estimated",
+    uz: "O'lchab bo'lmadi, taxmin",
+  },
+  "tables.bloatMeasuredIn": {
+    ko: "{ms} ms 소요",
+    en: "took {ms} ms",
+    uz: "{ms} ms ketdi",
+  },
+  "tables.bloatNeedsExtension": {
+    ko: "정확한 측정에는 pgstattuple 확장이 필요합니다:",
+    en: "Accurate measurement needs the pgstattuple extension:",
+    uz: "Aniq o'lchov uchun pgstattuple kengaytmasi kerak:",
+  },
+  "tables.bloatNeedsGrant": {
+    ko: "모니터링 사용자에게 실행 권한이 없습니다:",
+    en: "The monitoring user cannot execute it:",
+    uz: "Monitoring foydalanuvchisida ishga tushirish huquqi yo'q:",
+  },
+  "tables.bloatColTable": { ko: "테이블", en: "Table", uz: "Jadval" },
+  "tables.bloatColSize": { ko: "크기", en: "Size", uz: "Hajm" },
+  "tables.bloatColWasted": {
+    ko: "낭비 공간",
+    en: "Wasted",
+    uz: "Behuda joy",
+  },
+  "tables.bloatColDead": {
+    ko: "죽은 튜플",
+    en: "Dead tuples",
+    uz: "O'lik tuple",
+  },
+  "tables.bloatColFree": { ko: "빈 공간", en: "Free space", uz: "Bo'sh joy" },
 } satisfies Dictionary;

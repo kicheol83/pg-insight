@@ -141,4 +141,14 @@ export const vacuum = {
     en: "of 2B wraparound limit",
     uz: "2B wraparound chegarasidan",
   },
+  "vacuum.maxMxidAge": {
+    ko: "최대 MultiXact 나이",
+    en: "Max MultiXact age",
+    uz: "Maksimal MultiXact yoshi",
+  },
+  "vacuum.mxidFreezeMaxAge": {
+    ko: "MultiXact freeze 최대 나이",
+    en: "MultiXact freeze max age",
+    uz: "MultiXact freeze maksimal yoshi",
+  },
 } satisfies Dictionary;

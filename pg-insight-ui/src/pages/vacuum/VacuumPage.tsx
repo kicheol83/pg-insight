@@ -126,6 +126,30 @@ export default function VacuumPage() {
                   )}
                 </div>
               </div>
+              <div className="p-2.5 bg-[var(--bg-subtle)] rounded-lg">
+                <div className="text-[10px] text-muted mb-1">
+                  {t("vacuum.maxMxidAge")}
+                </div>
+                <div
+                  className={cn(
+                    "text-sm font-bold",
+                    xidAgeColor(data?.maxMxidAge ?? 0),
+                  )}
+                >
+                  {fmtXidAge(data?.maxMxidAge ?? 0)}
+                </div>
+              </div>
+              <div className="p-2.5 bg-[var(--bg-subtle)] rounded-lg">
+                <div className="text-[10px] text-muted mb-1">
+                  {t("vacuum.mxidFreezeMaxAge")}
+                </div>
+                <div className="text-sm font-bold text-primary">
+                  {fmtXidAge(
+                    data?.settings?.autovacuumMultixactFreezeMaxAge ??
+                      400_000_000,
+                  )}
+                </div>
+              </div>
             </div>
           </Card>
 

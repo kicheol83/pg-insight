@@ -6,25 +6,41 @@ import { useI18n, type MessageKey } from "@/i18n";
 
 export const ALERT_METRICS: Array<{ value: string; labelKey: MessageKey }> = [
   {
-    value: "connection_usage_pct",
+    value: "connection_utilization_pct",
     labelKey: "alerts.metric.connectionUsagePct",
   },
-  { value: "active_queries", labelKey: "alerts.metric.activeQueries" },
-  { value: "idle_in_transaction", labelKey: "alerts.metric.idleInTransaction" },
-  { value: "waiting_locks", labelKey: "alerts.metric.waitingLocks" },
-  { value: "longest_query_ms", labelKey: "alerts.metric.longestQueryMs" },
-  { value: "blocked_sessions", labelKey: "alerts.metric.blockedSessions" },
+  { value: "active_query_count", labelKey: "alerts.metric.activeQueries" },
+  { value: "long_running_query_ms", labelKey: "alerts.metric.longestQueryMs" },
+  { value: "idle_in_tx_count", labelKey: "alerts.metric.idleInTransaction" },
+  { value: "idle_in_tx_max_ms", labelKey: "alerts.metric.idleInTxMaxMs" },
+  { value: "slow_query_count", labelKey: "alerts.metric.slowQueryCount" },
+  { value: "lock_wait_count", labelKey: "alerts.metric.waitingLocks" },
+  { value: "lock_wait_max_ms", labelKey: "alerts.metric.lockWaitMaxMs" },
   { value: "deadlocks_delta", labelKey: "alerts.metric.deadlocksDelta" },
-  { value: "cache_hit_ratio", labelKey: "alerts.metric.cacheHitRatio" },
+  { value: "bloat_pct_max", labelKey: "alerts.metric.tableBloatRatio" },
+  { value: "xid_age_max", labelKey: "alerts.metric.xidAge" },
   {
     value: "replication_lag_bytes",
     labelKey: "alerts.metric.replicationLagBytes",
   },
-  { value: "xid_age", labelKey: "alerts.metric.xidAge" },
-  { value: "table_bloat_ratio", labelKey: "alerts.metric.tableBloatRatio" },
-  { value: "unused_index_size", labelKey: "alerts.metric.unusedIndexSize" },
-  { value: "wal_size_bytes", labelKey: "alerts.metric.walSizeBytes" },
-  { value: "slow_query_count", labelKey: "alerts.metric.slowQueryCount" },
+  { value: "cache_hit_ratio", labelKey: "alerts.metric.cacheHitRatio" },
+  {
+    value: "checkpoint_pressure",
+    labelKey: "alerts.metric.checkpointPressure",
+  },
+  {
+    value: "sync_standbys_missing",
+    labelKey: "alerts.metric.syncStandbysMissing",
+  },
+  { value: "wal_archive_failing", labelKey: "alerts.metric.walArchiveFailing" },
+  {
+    value: "wal_archive_ready_count",
+    labelKey: "alerts.metric.walArchiveReadyCount",
+  },
+  {
+    value: "inactive_slot_wal_bytes",
+    labelKey: "alerts.metric.inactiveSlotWalBytes",
+  },
 ];
 
 export const ALERT_SEVERITIES: Array<{ value: string; labelKey: MessageKey }> =
@@ -52,7 +68,7 @@ export function AddRuleModal({
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: "",
-    metric: "connection_usage_pct",
+    metric: "connection_utilization_pct",
     operator: "gt",
     threshold: "80",
     severity: "warning",
@@ -69,7 +85,9 @@ export function AddRuleModal({
         operator: form.operator,
         threshold: parseFloat(form.threshold),
         severity: form.severity,
-        notifyChannels: form.webhookUrl ? [form.webhookUrl] : [],
+        notifyChannels: form.webhookUrl.trim()
+          ? [`webhook:${form.webhookUrl.trim()}`]
+          : [],
       });
       toast({ type: "success", title: t("alerts.ruleCreated") });
       onAdded();

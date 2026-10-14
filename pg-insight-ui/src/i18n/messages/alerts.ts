@@ -100,6 +100,26 @@ export const alerts = {
     en: "≤ at most",
     uz: "≤ ko'pi bilan",
   },
+  "alerts.metric.syncStandbysMissing": {
+    ko: "부족한 동기 standby 수",
+    en: "Missing synchronous standbys",
+    uz: "Yetishmayotgan sinxron standby soni",
+  },
+  "alerts.metric.walArchiveFailing": {
+    ko: "WAL 아카이빙 실패 (1 = 실패)",
+    en: "WAL archiving failing (1 = failing)",
+    uz: "WAL arxivlash ishlamayapti (1 = xato)",
+  },
+  "alerts.metric.walArchiveReadyCount": {
+    ko: "아카이브 대기 WAL 세그먼트",
+    en: "WAL segments waiting to be archived",
+    uz: "Arxivlanishini kutayotgan WAL segmentlar",
+  },
+  "alerts.metric.inactiveSlotWalBytes": {
+    ko: "비활성 슬롯이 보유한 WAL (bytes)",
+    en: "WAL retained by an inactive slot (bytes)",
+    uz: "Nofaol slot ushlab turgan WAL (bayt)",
+  },
   "alerts.metric.connectionUsagePct": {
     ko: "커넥션 사용률 %",
     en: "Connection usage %",
@@ -125,10 +145,20 @@ export const alerts = {
     en: "Longest query (ms)",
     uz: "Eng uzun so'rov (ms)",
   },
-  "alerts.metric.blockedSessions": {
-    ko: "블로킹된 세션",
-    en: "Blocked sessions",
-    uz: "Bloklangan sessiyalar",
+  "alerts.metric.idleInTxMaxMs": {
+    ko: "최장 idle in transaction 시간 (ms)",
+    en: "Longest idle in transaction (ms)",
+    uz: "Eng uzun idle in transaction (ms)",
+  },
+  "alerts.metric.lockWaitMaxMs": {
+    ko: "최장 락 대기 시간 (ms)",
+    en: "Longest lock wait (ms)",
+    uz: "Eng uzun qulf kutish (ms)",
+  },
+  "alerts.metric.checkpointPressure": {
+    ko: "체크포인트 압박 (요청 비율 0–1)",
+    en: "Checkpoint pressure (requested share 0–1)",
+    uz: "Checkpoint bosimi (so'ralgan ulush 0–1)",
   },
   "alerts.metric.deadlocksDelta": {
     ko: "신규 데드락",
@@ -136,30 +166,24 @@ export const alerts = {
     uz: "Yangi deadlock'lar",
   },
   "alerts.metric.cacheHitRatio": {
-    ko: "캐시 히트율",
-    en: "Cache hit ratio",
-    uz: "Cache hit nisbati",
+    ko: "캐시 히트율 (0–1)",
+    en: "Cache hit ratio (0–1)",
+    uz: "Cache hit nisbati (0–1)",
   },
   "alerts.metric.replicationLagBytes": {
     ko: "복제 지연 (bytes)",
     en: "Replication lag (bytes)",
     uz: "Replikatsiya kechikishi (bytes)",
   },
-  "alerts.metric.xidAge": { ko: "XID age", en: "XID age", uz: "XID age" },
+  "alerts.metric.xidAge": {
+    ko: "최대 XID age",
+    en: "Max XID age",
+    uz: "Eng katta XID age",
+  },
   "alerts.metric.tableBloatRatio": {
-    ko: "테이블 bloat 비율",
-    en: "Table bloat ratio",
-    uz: "Jadval bloat nisbati",
-  },
-  "alerts.metric.unusedIndexSize": {
-    ko: "미사용 인덱스 크기 (bytes)",
-    en: "Unused index size (bytes)",
-    uz: "Ishlatilmagan indeks hajmi (bytes)",
-  },
-  "alerts.metric.walSizeBytes": {
-    ko: "WAL 크기 (bytes)",
-    en: "WAL size (bytes)",
-    uz: "WAL hajmi (bytes)",
+    ko: "최대 테이블 bloat (%)",
+    en: "Max table bloat (%)",
+    uz: "Eng katta jadval bloat (%)",
   },
   "alerts.metric.slowQueryCount": {
     ko: "슬로우 쿼리 수",

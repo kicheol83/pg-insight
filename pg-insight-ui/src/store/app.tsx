@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { io, Socket } from "socket.io-client";
 import { getToken } from "@/api/http";
+import { alertsApi } from "@/api/endpoints";
 import { useAuth } from "@/store/auth";
 
 export type WsStatus = "connecting" | "connected" | "disconnected" | "error";
@@ -130,6 +131,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: "SET_RT_CONNECTIONS", targetId, payload: data });
     });
   };
+
+  useEffect(() => {
+    const targetId = state.activeTargetId;
+    if (!isAuthenticated || !targetId) {
+      dispatch({ type: "SET_ACTIVE_ALERTS", payload: 0 });
+      return;
+    }
+    let cancelled = false;
+    const load = () =>
+      alertsApi
+        .getActive(targetId)
+        .then((events) => {
+          if (!cancelled) {
+            dispatch({ type: "SET_ACTIVE_ALERTS", payload: events.length });
+          }
+        })
+        .catch(() => undefined);
+    load();
+    const id = setInterval(load, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [isAuthenticated, state.activeTargetId]);
 
   const unsubscribeFromTarget = (targetId: string) => {
     socketRef.current?.emit("unsubscribe", { targetId });
