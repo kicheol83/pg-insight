@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { TargetHostPolicy } from '../targets/target-host.policy';
 import type { ConnectionSnapshot } from '../collector/collectors/connection.collector';
 import type { QuerySnapshot } from '../collector/collectors/query.collector';
 import type { LockSnapshot } from '../collector/collectors/lock.collector';
@@ -9,40 +10,62 @@ import type { ReplicationSnapshot } from '../collector/collectors/replication.co
 import type { IoBufferSnapshot } from '../collector/collectors/io-buffer.collector';
 import { RealtimeGateway } from '../real-time/real-time.gateway';
 
-export type AlertMetricName =
-  | 'connection_utilization_pct'
-  | 'idle_in_tx_count'
-  | 'idle_in_tx_max_ms'
-  | 'active_query_count'
-  | 'long_running_query_ms'
-  | 'slow_query_count'
-  | 'lock_wait_count'
-  | 'lock_wait_max_ms'
-  | 'deadlock_count'
-  | 'bloat_pct_max'
-  | 'xid_age_max'
-  | 'replication_lag_bytes'
-  | 'cache_hit_ratio'
-  | 'checkpoint_pressure';
+export const ALERT_METRIC_NAMES = [
+  'connection_utilization_pct',
+  'active_query_count',
+  'long_running_query_ms',
+  'idle_in_tx_count',
+  'idle_in_tx_max_ms',
+  'slow_query_count',
+  'lock_wait_count',
+  'lock_wait_max_ms',
+  'deadlocks_delta',
+  'bloat_pct_max',
+  'xid_age_max',
+  'replication_lag_bytes',
+  'cache_hit_ratio',
+  'checkpoint_pressure',
+  'sync_standbys_missing',
+  'wal_archive_failing',
+  'wal_archive_ready_count',
+  'inactive_slot_wal_bytes',
+] as const;
+
+export type AlertMetricName = (typeof ALERT_METRIC_NAMES)[number];
+
+const MAX_NOTIFY_CHANNELS = 5;
+const MAX_CHANNEL_LENGTH = 2000;
 
 export type AlertOperator = 'gt' | 'gte' | 'lt' | 'lte' | 'eq';
 export type AlertSeverity = 'info' | 'warning' | 'critical';
 
 export interface MetricValues {
-  connectionUtilizationPct: number;
-  idleInTxCount: number;
-  idleInTxMaxMs: number;
-  activeQueryCount: number;
-  longRunningQueryMs: number;
-  slowQueryCount: number;
-  lockWaitCount: number;
-  lockWaitMaxMs: number;
-  deadlockCount: number;
-  bloatPctMax: number;
-  xidAgeMax: number;
-  replicationLagBytes: number;
-  cacheHitRatio: number;
-  checkpointPressure: number;
+  connectionUtilizationPct?: number;
+  idleInTxCount?: number;
+  idleInTxMaxMs?: number;
+  activeQueryCount?: number;
+  longRunningQueryMs?: number;
+  slowQueryCount?: number;
+  lockWaitCount?: number;
+  lockWaitMaxMs?: number;
+  deadlocksDelta?: number;
+  bloatPctMax?: number;
+  xidAgeMax?: number;
+  replicationLagBytes?: number;
+  cacheHitRatio?: number;
+  checkpointPressure?: number;
+  syncStandbysMissing?: number;
+  walArchiveFailing?: number;
+  walArchiveReadyCount?: number;
+  inactiveSlotWalBytes?: number;
+}
+
+export function parseNotifyChannel(
+  channel: string,
+): { type: string; target: string } | null {
+  const sep = channel.indexOf(':');
+  if (sep <= 0) return null;
+  return { type: channel.slice(0, sep), target: channel.slice(sep + 1) };
 }
 
 export interface AlertRule {
@@ -82,6 +105,7 @@ export class AlertEngineService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
+    private readonly hostPolicy: TargetHostPolicy,
   ) {}
 
   async evaluate(targetId: string, metrics: MetricValues): Promise<void> {
@@ -105,8 +129,7 @@ export class AlertEngineService {
         rule.metric as AlertMetricName,
       );
 
-      if (currentValue === undefined) {
-        this.logger.debug(`Unknown metric: ${rule.metric}`);
+      if (currentValue === undefined || !Number.isFinite(currentValue)) {
         continue;
       }
 
@@ -150,7 +173,7 @@ export class AlertEngineService {
     metrics: MetricValues,
     metric: AlertMetricName,
   ): number | undefined {
-    const map: Record<AlertMetricName, number> = {
+    const map: Record<AlertMetricName, number | undefined> = {
       connection_utilization_pct: metrics.connectionUtilizationPct,
       idle_in_tx_count: metrics.idleInTxCount,
       idle_in_tx_max_ms: metrics.idleInTxMaxMs,
@@ -159,21 +182,26 @@ export class AlertEngineService {
       slow_query_count: metrics.slowQueryCount,
       lock_wait_count: metrics.lockWaitCount,
       lock_wait_max_ms: metrics.lockWaitMaxMs,
-      deadlock_count: metrics.deadlockCount,
+      deadlocks_delta: metrics.deadlocksDelta,
       bloat_pct_max: metrics.bloatPctMax,
       xid_age_max: metrics.xidAgeMax,
       replication_lag_bytes: metrics.replicationLagBytes,
       cache_hit_ratio: metrics.cacheHitRatio,
       checkpoint_pressure: metrics.checkpointPressure,
+      sync_standbys_missing: metrics.syncStandbysMissing,
+      wal_archive_failing: metrics.walArchiveFailing,
+      wal_archive_ready_count: metrics.walArchiveReadyCount,
+      inactive_slot_wal_bytes: metrics.inactiveSlotWalBytes,
     };
-    return map[metric];
+    return Object.prototype.hasOwnProperty.call(map, metric)
+      ? map[metric]
+      : undefined;
   }
 
   private async handleTriggered(
     rule: AlertRule,
     currentValue: number,
   ): Promise<boolean> {
-    // Cooldown tekshirish
     const lastTrigger = this.lastTriggerTimes.get(rule.id);
     if (lastTrigger) {
       const elapsedMs = Date.now() - lastTrigger.getTime();
@@ -220,21 +248,19 @@ export class AlertEngineService {
   }
 
   private async handleResolved(ruleId: string): Promise<void> {
-    const eventId = this.activeEventIds.get(ruleId);
-    if (!eventId) return;
-
     const db = this.prisma as unknown as Record<string, unknown>;
     try {
       await (
         db['alertEvent'] as {
-          update: (args: unknown) => Promise<unknown>;
+          updateMany: (args: unknown) => Promise<unknown>;
         }
-      ).update({
-        where: { id: eventId },
+      ).updateMany({
+        where: { ruleId, resolvedAt: null },
         data: { resolvedAt: new Date() },
       });
 
       this.activeEventIds.delete(ruleId);
+      this.lastTriggerTimes.delete(ruleId);
     } catch (error) {
       this.logger.error('Failed to resolve alert:', (error as Error).message);
     }
@@ -276,12 +302,18 @@ export class AlertEngineService {
       slow_query_count: 'Slow query count',
       lock_wait_count: 'Lock wait count',
       lock_wait_max_ms: 'Max lock wait duration',
-      deadlock_count: 'Deadlock count',
+      deadlocks_delta: 'New deadlocks',
+      active_query_count: 'Active queries',
+      long_running_query_ms: 'Longest running query (ms)',
       bloat_pct_max: 'Table bloat ratio',
       xid_age_max: 'XID age (wraparound risk)',
       replication_lag_bytes: 'Replication lag',
       cache_hit_ratio: 'Buffer cache hit ratio',
       checkpoint_pressure: 'Checkpoint pressure',
+      sync_standbys_missing: 'Missing synchronous standbys',
+      wal_archive_failing: 'WAL archiving failing',
+      wal_archive_ready_count: 'WAL segments waiting to be archived',
+      inactive_slot_wal_bytes: 'WAL retained by an inactive slot',
     };
 
     const label = metricLabels[rule.metric] ?? rule.metric;
@@ -294,7 +326,12 @@ export class AlertEngineService {
     message: string,
   ): Promise<void> {
     for (const channel of rule.notifyChannels) {
-      const [type, target] = channel.split(':', 2);
+      const parsed = parseNotifyChannel(channel);
+      if (!parsed) {
+        this.logger.warn(`Invalid notification channel on rule ${rule.id}`);
+        continue;
+      }
+      const { type, target } = parsed;
 
       try {
         switch (type) {
@@ -338,16 +375,56 @@ export class AlertEngineService {
       text: `*PG Insight Alert* - ${rule.severity.toUpperCase()}\n${message}`,
     };
 
+    await this.assertWebhookAllowed(url);
+
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      redirect: 'manual',
       signal: AbortSignal.timeout(5000),
     });
 
     if (!response.ok) {
       throw new Error(`Webhook returned ${response.status}`);
     }
+  }
+
+  public async validateNotifyChannels(channels: string[]): Promise<void> {
+    if (channels.length > MAX_NOTIFY_CHANNELS) {
+      throw new BadRequestException(
+        `At most ${MAX_NOTIFY_CHANNELS} notification channels are allowed`,
+      );
+    }
+    for (const channel of channels) {
+      const parsed = parseNotifyChannel(channel);
+      if (
+        !parsed ||
+        parsed.type !== 'webhook' ||
+        channel.length > MAX_CHANNEL_LENGTH
+      ) {
+        throw new BadRequestException(
+          'Notification channels must look like webhook:https://…',
+        );
+      }
+      await this.assertWebhookAllowed(parsed.target);
+    }
+  }
+
+  private async assertWebhookAllowed(target: string): Promise<void> {
+    let url: URL;
+    try {
+      url = new URL(target);
+    } catch {
+      throw new BadRequestException('Webhook URL is not a valid URL');
+    }
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      throw new BadRequestException('Webhook URL must use http or https');
+    }
+    if (url.username || url.password) {
+      throw new BadRequestException('Webhook URL must not contain credentials');
+    }
+    await this.hostPolicy.resolve(url.hostname.replace(/^\[|\]$/g, ''), false);
   }
 
   public static buildMetricValues(snapshots: {
@@ -358,6 +435,7 @@ export class AlertEngineService {
     vacuum?: VacuumSnapshot;
     replication?: ReplicationSnapshot;
     ioBuffer?: IoBufferSnapshot;
+    deadlocksDelta?: number;
   }): MetricValues {
     const conn = snapshots.connection;
     const lock = snapshots.lock;
@@ -367,33 +445,38 @@ export class AlertEngineService {
     const io = snapshots.ioBuffer;
 
     return {
-      connectionUtilizationPct: conn?.connectionUsagePct ?? 0,
-      idleInTxCount: conn?.idleInTransaction ?? 0,
-      idleInTxMaxMs: conn?.longestIdleInTxMs ?? 0,
-      activeQueryCount: conn?.activeQueries ?? 0,
-      longRunningQueryMs: conn?.longestQueryMs ?? 0,
+      connectionUtilizationPct: conn?.connectionUsagePct,
+      idleInTxCount: conn?.idleInTransaction,
+      idleInTxMaxMs: conn?.longestIdleInTxMs,
+      activeQueryCount: conn?.activeQueries,
+      longRunningQueryMs: conn?.longestQueryMs,
 
-      slowQueryCount:
-        snapshots.query?.queries.filter((q) => q.isSlow).length ?? 0,
+      slowQueryCount: snapshots.query?.queries.filter((q) => q.isSlow).length,
 
-      lockWaitCount: lock?.waitingLocks ?? 0,
-      lockWaitMaxMs:
-        lock?.blockingChains.reduce(
-          (max, c) => Math.max(max, ...c.waiters.map((w) => w.waitMs)),
-          0,
-        ) ?? 0,
-      deadlockCount: lock?.deadlocksTotal ?? 0,
+      lockWaitCount: lock?.waitingLocks,
+      lockWaitMaxMs: lock?.blockingChains.reduce(
+        (max, c) => Math.max(max, ...c.waiters.map((w) => w.waitMs)),
+        0,
+      ),
+      deadlocksDelta: snapshots.deadlocksDelta,
 
       bloatPctMax: tbl
-        ? Math.max(...tbl.tables.map((t) => t.bloatRatio)) * 100
-        : 0,
+        ? Math.max(0, ...tbl.tables.map((t) => t.bloatRatio)) * 100
+        : undefined,
 
-      xidAgeMax: vac?.maxXidAge ?? 0,
+      xidAgeMax: vac?.maxXidAge,
 
-      replicationLagBytes: rep?.maxLagBytes ?? 0,
+      replicationLagBytes: rep?.maxLagBytes,
 
-      cacheHitRatio: io?.cacheHitRatio ?? 1,
-      checkpointPressure: io?.checkpointPressure ?? 0,
+      cacheHitRatio: io?.cacheHitRatio,
+      checkpointPressure: io?.checkpointPressure,
+
+      syncStandbysMissing: rep?.isPrimary
+        ? Math.max(0, rep.syncRequired - rep.syncHealthy)
+        : undefined,
+      walArchiveFailing: rep ? (rep.archiveFailing ? 1 : 0) : undefined,
+      walArchiveReadyCount: rep?.archiveReadyCount ?? undefined,
+      inactiveSlotWalBytes: rep?.maxInactiveSlotWalBytes,
     };
   }
 
@@ -529,7 +612,7 @@ export class AlertEngineService {
         operator: 'gte' as AlertOperator,
         threshold: 40,
         severity: 'critical' as AlertSeverity,
-        cooldownMs: 3_600_000, // 1 soat
+        cooldownMs: 3_600_000,
       },
       {
         targetId,
@@ -564,6 +647,24 @@ export class AlertEngineService {
         metric: 'replication_lag_bytes' as AlertMetricName,
         operator: 'gte' as AlertOperator,
         threshold: 100 * 1024 * 1024,
+        severity: 'critical' as AlertSeverity,
+        cooldownMs: 300_000,
+      },
+      {
+        targetId,
+        name: 'Synchronous quorum lost',
+        metric: 'sync_standbys_missing' as AlertMetricName,
+        operator: 'gte' as AlertOperator,
+        threshold: 1,
+        severity: 'critical' as AlertSeverity,
+        cooldownMs: 60_000,
+      },
+      {
+        targetId,
+        name: 'WAL archiving failing',
+        metric: 'wal_archive_failing' as AlertMetricName,
+        operator: 'gte' as AlertOperator,
+        threshold: 1,
         severity: 'critical' as AlertSeverity,
         cooldownMs: 300_000,
       },

@@ -15,6 +15,7 @@ import { ReplicationCollector } from './collectors/replication.collector';
 import { SystemCollector } from './collectors/system.collector';
 import { TableCollector } from './collectors/table.collector';
 import { VacuumCollector } from './collectors/vacuum.collector';
+import { AlertEngineService } from '../alerts/alert-engine.service';
 
 @Injectable()
 class SlowConnectingPoolManager implements OnModuleInit {
@@ -59,6 +60,7 @@ describe('CollectorOrchestrator startup', () => {
         { provide: SystemCollector, useValue: stub },
         { provide: MetricsWriterService, useValue: stub },
         { provide: RealtimeGateway, useValue: stub },
+        { provide: AlertEngineService, useValue: stub },
         {
           provide: ConfigService,
           useValue: { get: (_key: string, fallback: unknown) => fallback },

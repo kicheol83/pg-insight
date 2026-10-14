@@ -4,8 +4,19 @@ import { PrismaService } from '../database/prisma.service';
 
 const EXPLAIN_STATEMENT_TIMEOUT = '5s';
 const EXPLAIN_LOCK_TIMEOUT = '1s';
+const SYNC_REPLY_MAX_AGE_SEC = 10;
+const BLOAT_STATEMENT_TIMEOUT = '5s';
+const BLOAT_MAX_TABLE_BYTES = 8 * 1024 ** 3;
+const BLOAT_MIN_TABLE_BYTES = 1024 ** 2;
 const EXPLAIN_FORBIDDEN_FUNCTIONS =
   /\b(pg_terminate_backend|pg_cancel_backend|pg_sleep\w*|pg_(try_)?advisory\w*|set_config|dblink\w*|lo_\w+|pg_read_\w*file|pg_ls_\w+|pg_stat_file|pg_reload_conf|pg_rotate_logfile|pg_notify|pg_logical_emit_message|query_to_xml\w*|cursor_to_xml\w*|table_to_xml\w*|database_to_xml\w*|schema_to_xml\w*)"?\s*\(/i;
+
+export function parseRequiredSyncStandbys(value: string): number {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const match = /^(?:(?:ANY|FIRST)\s+)?(\d+)\s*\(/i.exec(trimmed);
+  return match ? Math.max(1, parseInt(match[1], 10)) : 1;
+}
 
 @Injectable()
 export class LiveQueryService {
@@ -233,9 +244,7 @@ export class LiveQueryService {
       await client.query(
         `BEGIN TRANSACTION READ ONLY; SET LOCAL statement_timeout = '${EXPLAIN_STATEMENT_TIMEOUT}'; SET LOCAL lock_timeout = '${EXPLAIN_LOCK_TIMEOUT}'`,
       );
-      const options = analyze
-        ? 'ANALYZE, BUFFERS, FORMAT JSON'
-        : 'FORMAT JSON';
+      const options = analyze ? 'ANALYZE, BUFFERS, FORMAT JSON' : 'FORMAT JSON';
       const result = await client.query<{ 'QUERY PLAN': unknown }>(
         `EXPLAIN (${options}) ${trimmed}`,
       );
@@ -611,6 +620,131 @@ export class LiveQueryService {
     };
   }
 
+  async getTableBloat(targetId: string, limit = 10): Promise<TableBloatReport> {
+    const started = Date.now();
+    const fnRows = await this.poolManager
+      .query<{ schema_name: string; can_execute: boolean }>(
+        targetId,
+        `
+      SELECT n.nspname AS schema_name, has_function_privilege(p.oid, 'EXECUTE') AS can_execute
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE p.proname = 'pgstattuple_approx'
+      ORDER BY n.nspname
+      LIMIT 1
+    `,
+      )
+      .catch(() => []);
+    const fnSchema = fnRows[0]?.schema_name ?? null;
+    const canExecute = Boolean(fnRows[0]?.can_execute);
+    const useApprox = fnSchema !== null && canExecute;
+
+    const candidates = await this.poolManager.query<Record<string, unknown>>(
+      targetId,
+      `
+      SELECT c.oid::bigint AS relid, n.nspname AS schema_name, c.relname AS table_name,
+        pg_relation_size(c.oid) AS table_bytes, s.n_live_tup, s.n_dead_tup
+      FROM pg_stat_user_tables s
+      JOIN pg_class c ON c.oid = s.relid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE pg_relation_size(c.oid) >= $2
+      ORDER BY s.n_dead_tup DESC, pg_relation_size(c.oid) DESC
+      LIMIT $1
+    `,
+      [Math.min(Math.max(limit, 1), 25), BLOAT_MIN_TABLE_BYTES],
+    );
+
+    const estimate = (r: Record<string, unknown>): TableBloatEntry => {
+      const live = Number(r.n_live_tup) || 0;
+      const dead = Number(r.n_dead_tup) || 0;
+      const tableBytes = Number(r.table_bytes) || 0;
+      const deadRatio = live + dead > 0 ? dead / (live + dead) : 0;
+      return {
+        schemaName: String(r.schema_name),
+        tableName: String(r.table_name),
+        tableBytes,
+        wastedBytes: Math.round(tableBytes * deadRatio),
+        wastedPct: deadRatio * 100,
+        deadTuplePct: deadRatio * 100,
+        freePct: null,
+        scannedPct: null,
+        method: 'dead_tuples',
+      };
+    };
+
+    let tables: TableBloatEntry[];
+    if (!useApprox) {
+      tables = candidates.map(estimate);
+    } else {
+      tables = [];
+      const pool = this.poolManager.getPool(targetId);
+      if (!pool) throw new BadRequestException('Target is not connected');
+      const client = await pool.connect();
+      const fn = `"${fnSchema.replace(/"/g, '""')}".pgstattuple_approx`;
+      try {
+        await client.query(
+          `BEGIN TRANSACTION READ ONLY; SET LOCAL statement_timeout = '${BLOAT_STATEMENT_TIMEOUT}'`,
+        );
+        for (const r of candidates) {
+          const tableBytes = Number(r.table_bytes) || 0;
+          if (tableBytes > BLOAT_MAX_TABLE_BYTES) {
+            tables.push({ ...estimate(r), method: 'skipped_large' });
+            continue;
+          }
+          try {
+            await client.query('SAVEPOINT bloat_probe');
+            const res = await client.query<Record<string, unknown>>(
+              `SELECT table_len, scanned_percent, dead_tuple_len, dead_tuple_percent, approx_free_space, approx_free_percent FROM ${fn}($1::oid::regclass)`,
+              [String(r.relid)],
+            );
+            await client.query('RELEASE SAVEPOINT bloat_probe');
+            const row = res.rows[0] ?? {};
+            const deadLen = Number(row.dead_tuple_len) || 0;
+            const free = Number(row.approx_free_space) || 0;
+            const deadPct = Number(row.dead_tuple_percent) || 0;
+            const freePct = Number(row.approx_free_percent) || 0;
+            tables.push({
+              schemaName: String(r.schema_name),
+              tableName: String(r.table_name),
+              tableBytes: Number(row.table_len) || tableBytes,
+              wastedBytes: Math.round(deadLen + free),
+              wastedPct: deadPct + freePct,
+              deadTuplePct: deadPct,
+              freePct,
+              scannedPct: Number(row.scanned_percent) || 0,
+              method: 'pgstattuple_approx',
+            });
+          } catch (err) {
+            await client.query('ROLLBACK TO SAVEPOINT bloat_probe');
+            this.logger.warn(
+              `pgstattuple_approx failed for ${String(r.schema_name)}.${String(r.table_name)}: ${(err as Error).message}`,
+            );
+            tables.push({ ...estimate(r), method: 'failed' });
+          }
+        }
+      } finally {
+        await client.query('ROLLBACK').catch(() => undefined);
+        client.release();
+      }
+    }
+
+    tables.sort((a, b) => b.wastedBytes - a.wastedBytes);
+
+    return {
+      method: useApprox ? 'pgstattuple_approx' : 'dead_tuples',
+      extensionInstalled: fnSchema !== null,
+      canExecute,
+      installCommand: 'CREATE EXTENSION IF NOT EXISTS pgstattuple;',
+      grantCommand:
+        fnSchema !== null && !canExecute
+          ? 'GRANT pg_stat_scan_tables TO <monitoring_user>;'
+          : null,
+      measuredAt: new Date().toISOString(),
+      durationMs: Date.now() - started,
+      tables,
+    };
+  }
+
   async getVacuumProgress(targetId: string) {
     const activeRows = await this.poolManager.query<Record<string, unknown>>(
       targetId,
@@ -680,6 +814,24 @@ export class LiveQueryService {
     const databaseAge = Number(dbAgeRows[0]?.age) || 0;
     const maxXidAge = Math.max(databaseAge, ...xidAgeRisk.map((t) => t.age), 0);
 
+    const mxidRows = await this.poolManager
+      .query<{ db_mxid_age: string; max_table_mxid_age: string | null }>(
+        targetId,
+        `
+      SELECT
+        mxid_age(d.datminmxid) AS db_mxid_age,
+        (SELECT max(mxid_age(c.relminmxid)) FROM pg_class c WHERE c.relkind IN ('r','m','t')) AS max_table_mxid_age
+      FROM pg_database d
+      WHERE d.datname = current_database()
+    `,
+      )
+      .catch(() => []);
+    const databaseMxidAge = Number(mxidRows[0]?.db_mxid_age) || 0;
+    const maxMxidAge = Math.max(
+      databaseMxidAge,
+      Number(mxidRows[0]?.max_table_mxid_age) || 0,
+    );
+
     const settingsRows = await this.poolManager.query<{
       name: string;
       setting: string;
@@ -687,7 +839,7 @@ export class LiveQueryService {
       targetId,
       `
       SELECT name, setting FROM pg_settings
-      WHERE name IN ('autovacuum','autovacuum_max_workers','vacuum_freeze_table_age','autovacuum_freeze_max_age')
+      WHERE name IN ('autovacuum','autovacuum_max_workers','vacuum_freeze_table_age','autovacuum_freeze_max_age','autovacuum_multixact_freeze_max_age')
     `,
     );
     const settingsMap = new Map(settingsRows.map((r) => [r.name, r.setting]));
@@ -705,6 +857,9 @@ export class LiveQueryService {
       maxXidAge,
       databaseAge,
       hasXidRisk: maxXidAge >= 500_000_000,
+      databaseMxidAge,
+      maxMxidAge,
+      hasMxidRisk: maxMxidAge >= 500_000_000,
       autovacuum: {
         activeWorkers: Number(workerRows[0]?.cnt) || 0,
         maxWorkers: Number(settingsMap.get('autovacuum_max_workers')) || 3,
@@ -719,21 +874,35 @@ export class LiveQueryService {
           Number(settingsMap.get('vacuum_freeze_table_age')) || 150_000_000,
         autovacuumFreezeMaxAge:
           Number(settingsMap.get('autovacuum_freeze_max_age')) || 200_000_000,
+        autovacuumMultixactFreezeMaxAge:
+          Number(settingsMap.get('autovacuum_multixact_freeze_max_age')) ||
+          400_000_000,
       },
     };
   }
 
   async getReplication(targetId: string) {
-    const recoveryRows = await this.poolManager.query<{ is_recovery: boolean }>(
+    const statusRows = await this.poolManager.query<{
+      is_recovery: boolean;
+      sync_names?: string;
+      archive_mode?: string;
+    }>(
       targetId,
-      `SELECT pg_is_in_recovery() AS is_recovery`,
+      `
+      SELECT
+        pg_is_in_recovery() AS is_recovery,
+        current_setting('synchronous_standby_names') AS sync_names,
+        current_setting('archive_mode') AS archive_mode
+    `,
     );
-    const isPrimary = !recoveryRows[0]?.is_recovery;
+    const isPrimary = !statusRows[0]?.is_recovery;
+    const syncStandbyNames = String(statusRows[0]?.sync_names ?? '').trim();
+    const archiveMode = String(statusRows[0]?.archive_mode ?? 'off');
 
     const walSizeRows = await this.poolManager
       .query<{ size: string }>(
         targetId,
-        `SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0') AS size`,
+        `SELECT COALESCE(sum(size), 0) AS size FROM pg_ls_waldir()`,
       )
       .catch(() => [{ size: '0' }]);
 
@@ -744,44 +913,81 @@ export class LiveQueryService {
         `
         SELECT
           pid, client_addr::text AS client_addr, application_name, state, sync_state,
+          sync_priority,
           pg_wal_lsn_diff(sent_lsn, write_lsn) AS write_lag_bytes,
           pg_wal_lsn_diff(sent_lsn, flush_lsn) AS flush_lag_bytes,
           pg_wal_lsn_diff(sent_lsn, replay_lsn) AS replay_lag_bytes,
+          pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) AS total_lag_bytes,
           EXTRACT(EPOCH FROM write_lag) * 1000 AS write_lag_ms,
           EXTRACT(EPOCH FROM flush_lag) * 1000 AS flush_lag_ms,
           EXTRACT(EPOCH FROM replay_lag) * 1000 AS replay_lag_ms,
-          reply_time
+          reply_time,
+          EXTRACT(EPOCH FROM (now() - reply_time)) AS reply_age_s
         FROM pg_stat_replication
       `,
       );
     }
 
-    const replicaInfos = replicas.map((r) => ({
-      pid: Number(r.pid),
-      clientAddr: String(r.client_addr ?? ''),
-      applicationName: String(r.application_name ?? ''),
-      state: String(r.state),
-      syncState: String(r.sync_state),
-      writeLagBytes: Number(r.write_lag_bytes) || 0,
-      flushLagBytes: Number(r.flush_lag_bytes) || 0,
-      replayLagBytes: Number(r.replay_lag_bytes) || 0,
-      totalLagBytes: Number(r.replay_lag_bytes) || 0,
-      writeLagMs: r.write_lag_ms != null ? Number(r.write_lag_ms) : null,
-      flushLagMs: r.flush_lag_ms != null ? Number(r.flush_lag_ms) : null,
-      replayLagMs: r.replay_lag_ms != null ? Number(r.replay_lag_ms) : null,
-      replyTime: r.reply_time,
-    }));
+    const replicaInfos = replicas.map((r) => {
+      const replayLagBytes = Number(r.replay_lag_bytes) || 0;
+      return {
+        pid: Number(r.pid),
+        clientAddr: String(r.client_addr ?? ''),
+        applicationName: String(r.application_name ?? ''),
+        state: String(r.state),
+        syncState: String(r.sync_state),
+        syncPriority: Number(r.sync_priority) || 0,
+        writeLagBytes: Number(r.write_lag_bytes) || 0,
+        flushLagBytes: Number(r.flush_lag_bytes) || 0,
+        replayLagBytes,
+        totalLagBytes:
+          r.total_lag_bytes != null
+            ? Number(r.total_lag_bytes) || 0
+            : replayLagBytes,
+        writeLagMs: r.write_lag_ms != null ? Number(r.write_lag_ms) : null,
+        flushLagMs: r.flush_lag_ms != null ? Number(r.flush_lag_ms) : null,
+        replayLagMs: r.replay_lag_ms != null ? Number(r.replay_lag_ms) : null,
+        replyTime: r.reply_time,
+        replyAgeSec: r.reply_age_s != null ? Number(r.reply_age_s) : null,
+      };
+    });
 
+    const syncRequired = syncStandbyNames
+      ? parseRequiredSyncStandbys(syncStandbyNames)
+      : 0;
+    const syncHealthy = replicaInfos.filter(
+      (r) =>
+        (r.syncState === 'sync' || r.syncState === 'quorum') &&
+        r.state === 'streaming' &&
+        r.replyAgeSec !== null &&
+        r.replyAgeSec <= SYNC_REPLY_MAX_AGE_SEC,
+    ).length;
+    const synchronous =
+      isPrimary && syncStandbyNames
+        ? {
+            standbyNames: syncStandbyNames,
+            required: syncRequired,
+            healthy: syncHealthy,
+            satisfied: syncHealthy >= syncRequired,
+          }
+        : null;
+
+    const currentLsnExpr = isPrimary
+      ? 'pg_current_wal_lsn()'
+      : 'pg_last_wal_receive_lsn()';
     const slotRows = await this.poolManager.query<Record<string, unknown>>(
       targetId,
       `
       SELECT slot_name, slot_type, plugin, active, active_pid, database,
-        pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn) AS wal_bytes
-      FROM pg_replication_slots
+        to_jsonb(s) ->> 'wal_status' AS wal_status,
+        to_jsonb(s) ->> 'safe_wal_size' AS safe_wal_size,
+        pg_wal_lsn_diff(${currentLsnExpr}, restart_lsn) AS wal_bytes
+      FROM pg_replication_slots s
     `,
     );
     const slots = slotRows.map((r) => {
       const walBytes = Number(r.wal_bytes) || 0;
+      const walStatus = r.wal_status ? String(r.wal_status) : null;
       return {
         slotName: String(r.slot_name),
         slotType: String(r.slot_type),
@@ -789,21 +995,47 @@ export class LiveQueryService {
         active: Boolean(r.active),
         activePid: r.active_pid ? Number(r.active_pid) : null,
         walBytes,
-        isBlocking: walBytes > 1024 ** 3,
+        walStatus,
+        safeWalSizeBytes:
+          r.safe_wal_size != null ? Number(r.safe_wal_size) : null,
+        isBlocking:
+          walBytes > 1024 ** 3 ||
+          walStatus === 'unreserved' ||
+          walStatus === 'lost',
         database: r.database ? String(r.database) : null,
       };
     });
 
-    let receiverInfo = null;
+    let receiverInfo: {
+      status: string;
+      receivedLsn: string | null;
+      latencyMs: number | null;
+      lastMsgReceiptTime: unknown;
+      senderHost: string | null;
+      senderPort: number | null;
+      slotName: string | null;
+    } | null = null;
+    let standby: {
+      receiveLsn: string | null;
+      replayLsn: string | null;
+      replayGapBytes: number;
+      lastReplayAt: unknown;
+      replayDelaySec: number | null;
+      paused: boolean;
+    } | null = null;
     if (!isPrimary) {
       const recvRows = await this.poolManager
         .query<Record<string, unknown>>(
           targetId,
           `
-        SELECT status, received_lsn::text AS received_lsn,
+        SELECT status,
+          COALESCE(to_jsonb(r) ->> 'flushed_lsn', to_jsonb(r) ->> 'received_lsn') AS received_lsn,
           EXTRACT(EPOCH FROM (now() - last_msg_receipt_time)) * 1000 AS latency_ms,
-          last_msg_receipt_time
-        FROM pg_stat_wal_receiver
+          last_msg_receipt_time,
+          to_jsonb(r) ->> 'sender_host' AS sender_host,
+          to_jsonb(r) ->> 'sender_port' AS sender_port,
+          slot_name
+        FROM pg_stat_wal_receiver r
       `,
         )
         .catch(() => []);
@@ -818,9 +1050,59 @@ export class LiveQueryService {
               ? Number(recvRows[0].latency_ms)
               : null,
           lastMsgReceiptTime: recvRows[0].last_msg_receipt_time,
+          senderHost: recvRows[0].sender_host
+            ? String(recvRows[0].sender_host)
+            : null,
+          senderPort: recvRows[0].sender_port
+            ? Number(recvRows[0].sender_port)
+            : null,
+          slotName: recvRows[0].slot_name
+            ? String(recvRows[0].slot_name)
+            : null,
+        };
+      }
+
+      const replayRows = await this.poolManager
+        .query<Record<string, unknown>>(
+          targetId,
+          `
+        SELECT
+          pg_last_wal_receive_lsn()::text AS receive_lsn,
+          pg_last_wal_replay_lsn()::text AS replay_lsn,
+          pg_wal_lsn_diff(pg_last_wal_receive_lsn(), pg_last_wal_replay_lsn()) AS replay_gap_bytes,
+          pg_last_xact_replay_timestamp() AS last_replay_at,
+          EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp())) AS replay_delay_s,
+          pg_is_wal_replay_paused() AS paused
+      `,
+        )
+        .catch(() => []);
+      if (replayRows[0]) {
+        standby = {
+          receiveLsn: replayRows[0].receive_lsn
+            ? String(replayRows[0].receive_lsn)
+            : null,
+          replayLsn: replayRows[0].replay_lsn
+            ? String(replayRows[0].replay_lsn)
+            : null,
+          replayGapBytes: Math.max(
+            0,
+            Number(replayRows[0].replay_gap_bytes) || 0,
+          ),
+          lastReplayAt: replayRows[0].last_replay_at ?? null,
+          replayDelaySec:
+            replayRows[0].replay_delay_s != null
+              ? Number(replayRows[0].replay_delay_s)
+              : null,
+          paused: Boolean(replayRows[0].paused),
         };
       }
     }
+
+    const archiver = await this.getArchiverStatus(
+      targetId,
+      archiveMode,
+      isPrimary,
+    );
 
     return {
       isPrimary,
@@ -838,6 +1120,72 @@ export class LiveQueryService {
       ),
       totalWalRetained: slots.reduce((s, sl) => s + sl.walBytes, 0),
       receiverInfo,
+      standby,
+      synchronous,
+      archiver,
+    };
+  }
+
+  private async getArchiverStatus(
+    targetId: string,
+    archiveMode: string,
+    isPrimary: boolean,
+  ): Promise<ArchiverStatus> {
+    const enabled =
+      archiveMode === 'always' || (archiveMode === 'on' && isPrimary);
+    const rows = await this.poolManager
+      .query<Record<string, unknown>>(
+        targetId,
+        `
+      SELECT archived_count, last_archived_wal, last_archived_time,
+        failed_count, last_failed_wal, last_failed_time,
+        EXTRACT(EPOCH FROM (now() - last_archived_time)) AS last_archived_age_s
+      FROM pg_stat_archiver
+    `,
+      )
+      .catch(() => []);
+    const readyRows = enabled
+      ? await this.poolManager
+          .query<{ ready: string }>(
+            targetId,
+            `SELECT count(*) AS ready FROM pg_ls_archive_statusdir() WHERE name LIKE '%.ready'`,
+          )
+          .catch(() => null)
+      : null;
+
+    const row = rows[0] ?? {};
+    const lastArchivedTime = row.last_archived_time
+      ? new Date(row.last_archived_time as string)
+      : null;
+    const lastFailedTime = row.last_failed_time
+      ? new Date(row.last_failed_time as string)
+      : null;
+    const failedCount = Number(row.failed_count) || 0;
+    const failing =
+      enabled &&
+      failedCount > 0 &&
+      lastFailedTime !== null &&
+      (lastArchivedTime === null || lastFailedTime > lastArchivedTime);
+
+    return {
+      mode: archiveMode,
+      enabled,
+      archivedCount: Number(row.archived_count) || 0,
+      lastArchivedWal: row.last_archived_wal
+        ? String(row.last_archived_wal)
+        : null,
+      lastArchivedTime: lastArchivedTime
+        ? lastArchivedTime.toISOString()
+        : null,
+      lastArchivedAgeSec:
+        row.last_archived_age_s != null
+          ? Number(row.last_archived_age_s)
+          : null,
+      failedCount,
+      lastFailedWal: row.last_failed_wal ? String(row.last_failed_wal) : null,
+      lastFailedTime: lastFailedTime ? lastFailedTime.toISOString() : null,
+      readyCount: readyRows ? Number(readyRows[0]?.ready) || 0 : null,
+      failing,
     };
   }
 
@@ -1559,7 +1907,12 @@ export class LiveQueryService {
     let score = 100;
 
     if (vacuum) {
-      if (vacuum.maxXidAge >= 1_500_000_000) {
+      const xidParams = {
+        xid: vacuum.maxXidAge,
+        mxid: vacuum.maxMxidAge,
+      };
+      const worstAge = Math.max(vacuum.maxXidAge, vacuum.maxMxidAge);
+      if (worstAge >= 1_500_000_000) {
         score -= 25;
         factors.push({
           id: 'xid_age',
@@ -1567,8 +1920,10 @@ export class LiveQueryService {
           status: 'critical',
           impact: -25,
           detail: `Max XID yoshi: ${vacuum.maxXidAge.toLocaleString()} - favqulodda VACUUM FREEZE kerak`,
+          code: 'emergency',
+          params: xidParams,
         });
-      } else if (vacuum.hasXidRisk) {
+      } else if (vacuum.hasXidRisk || vacuum.hasMxidRisk) {
         score -= 12;
         factors.push({
           id: 'xid_age',
@@ -1576,6 +1931,8 @@ export class LiveQueryService {
           status: 'warning',
           impact: -12,
           detail: `Max XID yoshi: ${vacuum.maxXidAge.toLocaleString()}`,
+          code: 'risk',
+          params: xidParams,
         });
       } else {
         factors.push({
@@ -1583,11 +1940,12 @@ export class LiveQueryService {
           label: 'XID wraparound xavfi',
           status: 'ok',
           impact: 0,
+          code: 'ok',
+          params: xidParams,
         });
       }
     }
 
-    // 2) Jadval bloat
     if (tables) {
       const maxBloat = Math.max(0, ...tables.tables.map((t) => t.bloatRatio));
       if (maxBloat >= 0.4) {
@@ -1598,6 +1956,11 @@ export class LiveQueryService {
           status: 'critical',
           impact: -15,
           detail: `Eng yuqori bloat: ${(maxBloat * 100).toFixed(0)}% (${tables.tablesNeedingVacuum} ta jadval VACUUM kutmoqda)`,
+          code: 'high',
+          params: {
+            pct: Math.round(maxBloat * 100),
+            count: tables.tablesNeedingVacuum,
+          },
         });
       } else if (tables.tablesNeedingVacuum > 0) {
         score -= 6;
@@ -1607,6 +1970,8 @@ export class LiveQueryService {
           status: 'warning',
           impact: -6,
           detail: `${tables.tablesNeedingVacuum} ta jadval VACUUM kutmoqda`,
+          code: 'pending',
+          params: { count: tables.tablesNeedingVacuum },
         });
       } else {
         factors.push({
@@ -1630,6 +1995,8 @@ export class LiveQueryService {
           status: 'critical',
           impact: -15,
           detail: `O'rtacha: ${(avgHit * 100).toFixed(1)}% - shared_buffers yetarli emasligini bildirishi mumkin`,
+          code: 'low',
+          params: { pct: (avgHit * 100).toFixed(1) },
         });
       } else if (avgHit < 0.98) {
         score -= 5;
@@ -1639,6 +2006,8 @@ export class LiveQueryService {
           status: 'warning',
           impact: -5,
           detail: `O'rtacha: ${(avgHit * 100).toFixed(1)}%`,
+          code: 'warn',
+          params: { pct: (avgHit * 100).toFixed(1) },
         });
       } else {
         factors.push({
@@ -1659,6 +2028,8 @@ export class LiveQueryService {
           status: 'warning',
           impact: -10,
           detail: `Maksimal lag: ${(replication.maxLagBytes / 1024 / 1024).toFixed(1)} MB`,
+          code: 'lagging',
+          params: { mb: (replication.maxLagBytes / 1024 / 1024).toFixed(1) },
         });
       } else {
         factors.push({
@@ -1667,6 +2038,13 @@ export class LiveQueryService {
           status: 'ok',
           impact: 0,
         });
+      }
+    }
+
+    if (replication) {
+      for (const factor of replicationHealthFactors(replication)) {
+        score += factor.impact;
+        factors.push(factor);
       }
     }
 
@@ -1679,6 +2057,8 @@ export class LiveQueryService {
           status: 'critical',
           impact: -15,
           detail: `${connections.connectionUsagePct.toFixed(0)}% band - yangi ulanishlar rad etilishi mumkin`,
+          code: 'full',
+          params: { pct: Math.round(connections.connectionUsagePct) },
         });
       } else if (connections.connectionUsagePct >= 75) {
         score -= 5;
@@ -1688,6 +2068,8 @@ export class LiveQueryService {
           status: 'warning',
           impact: -5,
           detail: `${connections.connectionUsagePct.toFixed(0)}% band`,
+          code: 'high',
+          params: { pct: Math.round(connections.connectionUsagePct) },
         });
       } else {
         factors.push({
@@ -1709,6 +2091,7 @@ export class LiveQueryService {
           status: 'warning',
           impact: -15,
           detail: 'Hech qachon muvaffaqiyatli backup olinmagan',
+          code: 'never',
         });
       } else {
         const ageHours =
@@ -1721,6 +2104,8 @@ export class LiveQueryService {
             status: 'warning',
             impact: -10,
             detail: `Oxirgi backup ${Math.floor(ageHours / 24)} kun oldin`,
+            code: 'days',
+            params: { days: Math.floor(ageHours / 24) },
           });
         } else if (ageHours > 24) {
           score -= 3;
@@ -1730,6 +2115,8 @@ export class LiveQueryService {
             status: 'info',
             impact: -3,
             detail: `Oxirgi backup ${Math.floor(ageHours)} soat oldin`,
+            code: 'hours',
+            params: { hours: Math.floor(ageHours) },
           });
         } else {
           factors.push({
@@ -1738,6 +2125,8 @@ export class LiveQueryService {
             status: 'ok',
             impact: 0,
             detail: `Oxirgi backup ${Math.floor(ageHours)} soat oldin`,
+            code: 'hours',
+            params: { hours: Math.floor(ageHours) },
           });
         }
       }
@@ -1933,12 +2322,226 @@ export interface HealthFactor {
   status: 'ok' | 'info' | 'warning' | 'critical';
   impact: number;
   detail?: string;
+  code?: string;
+  params?: Record<string, string | number>;
 }
 
 export interface HealthScoreReport {
   targetId: string;
   checkedAt: string;
-  score: number; // 0-100
+  score: number;
   grade: 'excellent' | 'good' | 'fair' | 'poor';
   factors: HealthFactor[];
+}
+
+export interface ArchiverStatus {
+  mode: string;
+  enabled: boolean;
+  archivedCount: number;
+  lastArchivedWal: string | null;
+  lastArchivedTime: string | null;
+  lastArchivedAgeSec: number | null;
+  failedCount: number;
+  lastFailedWal: string | null;
+  lastFailedTime: string | null;
+  readyCount: number | null;
+  failing: boolean;
+}
+
+export interface TableBloatEntry {
+  schemaName: string;
+  tableName: string;
+  tableBytes: number;
+  wastedBytes: number;
+  wastedPct: number;
+  deadTuplePct: number;
+  freePct: number | null;
+  scannedPct: number | null;
+  method: 'pgstattuple_approx' | 'dead_tuples' | 'skipped_large' | 'failed';
+}
+
+export interface TableBloatReport {
+  method: 'pgstattuple_approx' | 'dead_tuples';
+  extensionInstalled: boolean;
+  canExecute: boolean;
+  installCommand: string;
+  grantCommand: string | null;
+  measuredAt: string;
+  durationMs: number;
+  tables: TableBloatEntry[];
+}
+
+type ReplicationReport = Awaited<
+  ReturnType<LiveQueryService['getReplication']>
+>;
+
+const REPLAY_GAP_WARNING_BYTES = 64 * 1024 * 1024;
+const ARCHIVE_READY_WARNING = 20;
+
+export function replicationHealthFactors(
+  replication: ReplicationReport,
+): HealthFactor[] {
+  const factors: HealthFactor[] = [];
+  const sync = replication.synchronous;
+  if (sync) {
+    factors.push(
+      sync.satisfied
+        ? {
+            id: 'sync_quorum',
+            label: 'Sinxron standby kvorumi',
+            status: 'ok',
+            impact: 0,
+            code: 'ok',
+            params: { healthy: sync.healthy, required: sync.required },
+          }
+        : {
+            id: 'sync_quorum',
+            label: 'Sinxron standby kvorumi',
+            status: 'critical',
+            impact: -20,
+            detail: `${sync.required} ta sinxron standby kerak, ishlayotgani ${sync.healthy} ta - commit'lar kutib qoladi`,
+            code: 'unsatisfied',
+            params: {
+              healthy: sync.healthy,
+              required: sync.required,
+              names: sync.standbyNames,
+            },
+          },
+    );
+  }
+
+  if (replication.slots.length > 0) {
+    const lost = replication.slots.find((s) => s.walStatus === 'lost');
+    const retaining = replication.slots
+      .filter((s) => !s.active && s.isBlocking)
+      .sort((a, b) => b.walBytes - a.walBytes)[0];
+    if (lost) {
+      factors.push({
+        id: 'replication_slots',
+        label: 'Replication slot',
+        status: 'critical',
+        impact: -15,
+        detail: `${lost.slotName} slot'i kerakli WAL'ni yo'qotgan - standby qayta qurilishi kerak`,
+        code: 'lost',
+        params: { slot: lost.slotName },
+      });
+    } else if (retaining) {
+      factors.push({
+        id: 'replication_slots',
+        label: 'Replication slot',
+        status: 'warning',
+        impact: -10,
+        detail: `Faol bo'lmagan ${retaining.slotName} slot'i ${(retaining.walBytes / 1024 / 1024).toFixed(0)} MB WAL ushlab turibdi`,
+        code: 'retaining',
+        params: {
+          slot: retaining.slotName,
+          mb: Math.round(retaining.walBytes / 1024 / 1024),
+        },
+      });
+    } else {
+      factors.push({
+        id: 'replication_slots',
+        label: 'Replication slot',
+        status: 'ok',
+        impact: 0,
+        code: 'ok',
+        params: { count: replication.slots.length },
+      });
+    }
+  }
+
+  if (!replication.isPrimary) {
+    const receiver = replication.receiverInfo;
+    const standby = replication.standby;
+    if (!receiver || receiver.status !== 'streaming') {
+      factors.push({
+        id: 'standby_replay',
+        label: 'Standby replikatsiyasi',
+        status: 'warning',
+        impact: -10,
+        detail: `WAL receiver holati: ${receiver?.status ?? "yo'q"}`,
+        code: 'receiverDown',
+        params: { status: receiver?.status ?? '-' },
+      });
+    } else if (standby?.paused) {
+      factors.push({
+        id: 'standby_replay',
+        label: 'Standby replikatsiyasi',
+        status: 'warning',
+        impact: -5,
+        detail: 'WAL replay pauza qilingan',
+        code: 'paused',
+      });
+    } else if (standby && standby.replayGapBytes > REPLAY_GAP_WARNING_BYTES) {
+      factors.push({
+        id: 'standby_replay',
+        label: 'Standby replikatsiyasi',
+        status: 'warning',
+        impact: -5,
+        detail: `Qabul qilingan, lekin qo'llanmagan WAL: ${(standby.replayGapBytes / 1024 / 1024).toFixed(0)} MB`,
+        code: 'replayBehind',
+        params: { mb: Math.round(standby.replayGapBytes / 1024 / 1024) },
+      });
+    } else {
+      factors.push({
+        id: 'standby_replay',
+        label: 'Standby replikatsiyasi',
+        status: 'ok',
+        impact: 0,
+        code: 'streaming',
+        params: { host: receiver.senderHost ?? '-' },
+      });
+    }
+  }
+
+  const archiver = replication.archiver;
+  if (archiver.enabled) {
+    if (archiver.failing) {
+      factors.push({
+        id: 'wal_archiving',
+        label: 'WAL arxivlash',
+        status: 'critical',
+        impact: -15,
+        detail: `archive_command ishlamayapti: oxirgi xato ${archiver.lastFailedWal ?? '-'} - PITR zanjiri uzilgan`,
+        code: 'failing',
+        params: {
+          wal: archiver.lastFailedWal ?? '-',
+          failed: archiver.failedCount,
+        },
+      });
+    } else if (
+      archiver.readyCount !== null &&
+      archiver.readyCount > ARCHIVE_READY_WARNING
+    ) {
+      factors.push({
+        id: 'wal_archiving',
+        label: 'WAL arxivlash',
+        status: 'warning',
+        impact: -5,
+        detail: `${archiver.readyCount} ta WAL segmenti arxivlanishini kutmoqda`,
+        code: 'backlog',
+        params: { ready: archiver.readyCount },
+      });
+    } else {
+      factors.push({
+        id: 'wal_archiving',
+        label: 'WAL arxivlash',
+        status: 'ok',
+        impact: 0,
+        code: 'ok',
+        params: { wal: archiver.lastArchivedWal ?? '-' },
+      });
+    }
+  } else if (replication.isPrimary) {
+    factors.push({
+      id: 'wal_archiving',
+      label: 'WAL arxivlash',
+      status: 'info',
+      impact: 0,
+      detail: "archive_mode o'chiq - PITR imkoni yo'q",
+      code: 'off',
+    });
+  }
+
+  return factors;
 }

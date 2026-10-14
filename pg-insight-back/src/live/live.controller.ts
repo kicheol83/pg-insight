@@ -150,6 +150,15 @@ export class LiveController {
     return this.liveQuery.getTableStats(targetId);
   }
 
+  @Get('tables/bloat')
+  @ApiOperation({
+    summary:
+      'Measure table bloat with pgstattuple_approx, falling back to a dead-tuple estimate',
+  })
+  async tableBloat(@Param('targetId') targetId: string) {
+    return this.liveQuery.getTableBloat(targetId);
+  }
+
   @Get('vacuum/progress')
   @ApiOperation({
     summary: 'Get active vacuum progress and XID wraparound risk',
