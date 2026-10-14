@@ -11,12 +11,13 @@ An open-source, multi-tenant PostgreSQL monitoring service. Anyone can sign up, 
 - **Dashboard**: connection, cache hit ratio and lock wait trends from metrics stored in TimescaleDB
 - **Query analysis**: slow query analysis based on `pg_stat_statements`, `EXPLAIN (ANALYZE)` plan viewer
 - **Lock analysis**: blocking chain detection and deadlock risk detection
-- **Tables / VACUUM**: bloat ratio, dead tuples, XID age tracking
-- **Replication**: per-replica lag (bytes / ms), inactive slot detection
+- **Tables / VACUUM**: bloat ratio, dead tuples, XID and MultiXact age, real wasted space measured with `pgstattuple_approx` (estimated from `n_dead_tup` when the extension is missing)
+- **Replication**: per-replica lag (bytes / ms), synchronous quorum (`ANY`/`FIRST n`) and how many standbys are responding, received/replayed LSN and pending replay on a standby, slot `wal_status`
+- **WAL archiving**: a failure in `pg_stat_archiver` newer than the last success is reported as a broken PITR chain, plus the number of segments waiting to be archived (`.ready`)
 - **Maintenance actions**: `VACUUM (ANALYZE)`, `DROP INDEX CONCURRENTLY` for unused indexes
 - **Backups**: `pg_dump`-based backup creation and download (admin only)
-- **Alerting**: threshold rules, cooldowns, webhooks
-- **Health Score / Security audit**: configuration diagnostics and security checks
+- **Alerting**: rules evaluated every 15 s against the latest collected snapshots (18 metrics: connections, queries, lock waits, new deadlocks, bloat, XID, replication lag, cache, checkpoints, missing synchronous standbys, failing WAL archiving and waiting segments, WAL retained by inactive slots), cooldowns, automatic resolution when the value recovers, webhooks (`webhook:https://…`, public addresses only, redirects not followed)
+- **Health Score / Security audit**: a 0–100 score from XID/MultiXact age, bloat, cache, replication lag, sync quorum, slots, standby replay, WAL archiving, connections and backups (factors shown in all three languages), plus security checks
 - **Multilingual UI**: Korean (default), English and Uzbek; the chosen language is remembered in the browser
 
 ## Tech Stack
@@ -141,6 +142,26 @@ npm run dev
 
 Open http://localhost:5173 and create the first admin account on the login screen. The admin is not subject to the host policy, so `localhost` targets can be registered.
 
+## Verified on a Replication Cluster
+
+The replication, archiving and bloat features were checked against a three-node replication cluster running in Docker (PostgreSQL 17, repmgr with one primary and two standbys, `synchronous_standby_names = 'ANY 1 (pg1, pg2, pg3)'`, pgBackRest WAL archive).
+
+| Situation | What PG Insight shows |
+|---|---|
+| Healthy primary | sync quorum 2 responding / 1 required, two `reserved` slots, last archived WAL |
+| Standby (pg2) | upstream `pg1-db:5432`, received LSN equals replayed LSN, 0 B waiting to be applied |
+| pgBackRest repository host stopped, then WAL switches | WAL archiving failing (-15), Health Score 85 → 70; back to healthy after the next successful archive once the repository is up |
+| `idempotency_keys` 240 MB after half of the expired keys were purged and vacuumed | "Need VACUUM" based on `n_dead_tup` is 0, while `pgstattuple_approx` measures 49.1 % (118 MB) free space in 35 ms |
+
+![Replication, primary](./docs/images/replication-primary.en.png)
+![Replication, standby](./docs/images/replication-standby.en.png)
+![Table bloat measurement](./docs/images/tables-bloat.en.png)
+![Health Score while WAL archiving fails (Korean UI)](./docs/images/health-archive-failing.ko.png)
+
+Alerting was checked on the same cluster. A `lock_wait_count ≥ 1` rule caught a wait created with an `ACCESS EXCLUSIVE` lock at the next evaluation, sent its webhook and resolved once the lock was released. A `deadlocks_delta ≥ 1` rule fired exactly once for one real deadlock and resolved at the next evaluation (the cumulative `pg_stat_database.deadlocks` counter is turned into a per-evaluation delta). A `sync_standbys_missing ≥ 1` rule fired while both standbys were paused for 35 s and resolved after they resumed, and a `wal_archive_failing ≥ 1` rule fired while the pgBackRest repository was stopped and resolved with the next successful archive after it was back.
+
+![Alert history (Korean UI)](./docs/images/alerts-history.ko.png)
+
 ## Tests
 
 ```powershell
@@ -150,8 +171,9 @@ cd ..\pg-insight-ui
 npx vitest run
 ```
 
-- 188 backend and 49 frontend tests
+- 252 backend tests (12 of them need a real database) and 50 frontend tests
 - Tests that need a real PostgreSQL (the lock collector query, the `EXPLAIN` time limit) run only when `TEST_TARGET_DATABASE_URL` is set.
+- The replication cluster tests (`src/live/live-query.cluster.spec.ts`) run only when `TEST_PRIMARY_DATABASE_URL` and `TEST_STANDBY_DATABASE_URL` are set; all 6 pass against that cluster.
 - `.github/workflows/ci.yml` runs typecheck, tests, migrations and the build against a PostgreSQL 16 service container
 
 ## Production Deployment
@@ -200,8 +222,11 @@ Use a dedicated monitoring account rather than a superuser.
 CREATE ROLE insight_monitor LOGIN PASSWORD '...';
 GRANT pg_monitor TO insight_monitor;
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+CREATE EXTENSION IF NOT EXISTS pgstattuple;
 ```
 
+- `pgstattuple` is optional. With it, bloat is measured with `pgstattuple_approx` (using `pg_stat_scan_tables`, which `pg_monitor` includes); without it, bloat is estimated from `n_dead_tup`.
+- The WAL directory size (`pg_ls_waldir`) and segments waiting to be archived (`pg_ls_archive_statusdir`) are also read through `pg_monitor`.
 - `pg_stat_statements` requires `shared_preload_libraries = 'pg_stat_statements'` in `postgresql.conf` and a restart.
 - The target must be reachable from the PG Insight server. Allow only that server in your firewall and `pg_hba.conf`, and use `sslmode=require` or stricter.
 
@@ -215,7 +240,7 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
 - The UI does not subscribe to per-target WebSocket rooms yet; dashboards refresh by REST polling
 - No email verification, password reset or account deletion
-- Text generated by the server (diagnostics and security check results, recommendations, error messages) is English only
+- Text generated by the server (diagnostics and security check results, recommendations, error messages) is not translated yet; Health Score factors are
 - ESLint configuration needs cleanup; no E2E tests (Playwright) yet
 
 ## License

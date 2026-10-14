@@ -11,12 +11,13 @@
 - **대시보드**: 커넥션, 캐시 적중률, 락 대기 추이를 TimescaleDB에 저장된 메트릭으로 표시
 - **쿼리 분석**: `pg_stat_statements` 기반 슬로우 쿼리 분석, `EXPLAIN (ANALYZE)` 실행 계획 시각화
 - **락 분석**: 블로킹 체인 탐지, 데드락 위험 감지
-- **테이블 / VACUUM**: 블로트 비율, dead tuple, XID age 추적
-- **복제 모니터링**: 레플리카별 지연(bytes / ms), 비활성 슬롯 감지
+- **테이블 / VACUUM**: 블로트 비율, dead tuple, XID·MultiXact age 추적, `pgstattuple_approx`로 실제 낭비 공간 측정 (확장이 없으면 `n_dead_tup` 기반 추정)
+- **복제 모니터링**: 레플리카별 지연(bytes / ms), 동기 복제 정족수(`ANY`/`FIRST n`)와 응답 중인 standby 수, standby의 수신·적용 LSN과 적용 대기 WAL, 슬롯 `wal_status`
+- **WAL 아카이빙**: `pg_stat_archiver`에서 마지막 실패가 마지막 성공보다 최근이면 PITR 체인이 끊긴 것으로 판단, 아카이브 대기(`.ready`) 세그먼트 수
 - **유지보수 작업**: `VACUUM (ANALYZE)`, 미사용 인덱스 `DROP INDEX CONCURRENTLY`
 - **백업**: `pg_dump` 기반 백업 생성 및 다운로드 (관리자 전용)
-- **알림**: 임계값 규칙, 쿨다운, 웹훅 연동
-- **Health Score / 보안 감사**: 설정 진단과 보안 점검 결과 제공
+- **알림**: 수집한 최신 스냅샷으로 15초마다 규칙 평가(커넥션, 쿼리, 락 대기, 신규 데드락, 블로트, XID, 복제 지연, 캐시, 체크포인트, 부족한 동기 standby, WAL 아카이빙 실패·대기 세그먼트, 비활성 슬롯이 보유한 WAL 18개 지표), 쿨다운, 값이 돌아오면 자동 해결, 웹훅(`webhook:https://…`, 공인 주소만, 리다이렉트 미추적)
+- **Health Score / 보안 감사**: XID·MultiXact, 블로트, 캐시, 복제 지연, 동기 정족수, 슬롯, standby 재생, WAL 아카이빙, 커넥션, 백업을 0–100점으로 합산 (항목은 3개 언어로 표시), 보안 점검 결과 제공
 - **다국어 UI**: 한국어(기본), English, O'zbekcha. 선택한 언어는 브라우저에 저장
 
 ## 기술 스택
@@ -141,6 +142,26 @@ npm run dev
 
 http://localhost:5173 에 접속하면 로그인 화면에서 첫 번째 관리자 계정을 생성할 수 있습니다. 관리자는 호스트 정책을 적용받지 않으므로 `localhost` 대상도 등록할 수 있습니다.
 
+## 복제 클러스터에서 검증
+
+복제·아카이빙·블로트 기능은 Docker로 띄운 3노드 복제 클러스터(PostgreSQL 17, repmgr primary 1 + standby 2, `synchronous_standby_names = 'ANY 1 (pg1, pg2, pg3)'`, pgBackRest WAL 아카이브)를 대상으로 확인했습니다.
+
+| 상황 | PG Insight 표시 |
+|---|---|
+| 정상 primary | 동기 정족수 응답 2 / 필요 1, 슬롯 2개 `reserved`, 마지막 아카이브 WAL |
+| standby (pg2) | 업스트림 `pg1-db:5432`, 받은 LSN = 적용한 LSN, 적용 대기 WAL 0 B |
+| pgBackRest 저장소 호스트 중지 후 WAL 스위치 | WAL 아카이빙 실패(-15점), Health Score 85 → 70. 저장소를 다시 켜면 다음 아카이브 성공 후 정상으로 복귀 |
+| `idempotency_keys` 240 MB, 만료 키 절반 삭제 + VACUUM 이후 | `n_dead_tup` 기준 "VACUUM 필요" 0개, `pgstattuple_approx`는 빈 공간 49.1% (118 MB) 측정, 35 ms 소요 |
+
+![복제 — primary](./docs/images/replication-primary.ko.png)
+![복제 — standby](./docs/images/replication-standby.ko.png)
+![테이블 블로트 측정](./docs/images/tables-bloat.ko.png)
+![WAL 아카이빙 실패 시 Health Score](./docs/images/health-archive-failing.ko.png)
+
+같은 클러스터에서 알림도 확인했습니다. `lock_wait_count ≥ 1` 규칙은 `ACCESS EXCLUSIVE` 락으로 만든 대기를 다음 평가에서 감지해 웹훅을 보냈고, 락이 풀린 뒤 해결됐습니다. `deadlocks_delta ≥ 1` 규칙은 실제 데드락 한 건에 한 번만 울리고 다음 평가에서 해결됐습니다 (`pg_stat_database.deadlocks`의 누적값을 평가 간 차이로 계산). `sync_standbys_missing ≥ 1` 규칙은 standby 두 대를 35초 멈췄을 때 울리고 재개 뒤 해결됐고, `wal_archive_failing ≥ 1` 규칙은 pgBackRest 저장소를 멈췄을 때 울리고 다시 켠 뒤 다음 아카이브 성공과 함께 해결됐습니다.
+
+![알림 이력](./docs/images/alerts-history.ko.png)
+
 ## 테스트
 
 ```powershell
@@ -150,8 +171,9 @@ cd ..\pg-insight-ui
 npx vitest run
 ```
 
-- Backend 188개, Frontend 49개 테스트
+- Backend 252개(실제 DB가 필요한 12개 포함), Frontend 50개 테스트
 - 실제 PostgreSQL이 필요한 테스트(락 수집 쿼리, `EXPLAIN` 시간 제한)는 `TEST_TARGET_DATABASE_URL`이 있을 때만 실행됩니다.
+- 복제 클러스터 테스트(`src/live/live-query.cluster.spec.ts`)는 `TEST_PRIMARY_DATABASE_URL`과 `TEST_STANDBY_DATABASE_URL`이 있을 때만 실행됩니다. 위 클러스터에서 6개 모두 통과했습니다.
 - `.github/workflows/ci.yml`: PostgreSQL 16 서비스 컨테이너로 타입 체크, 테스트, 마이그레이션, 빌드를 실행
 
 ## 운영 배포
@@ -200,8 +222,11 @@ cp .env.prod.example .env
 CREATE ROLE insight_monitor LOGIN PASSWORD '...';
 GRANT pg_monitor TO insight_monitor;
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+CREATE EXTENSION IF NOT EXISTS pgstattuple;
 ```
 
+- `pgstattuple`은 선택 사항입니다. 있으면 블로트를 `pgstattuple_approx`로 실제 측정하고(`pg_monitor`에 포함된 `pg_stat_scan_tables` 권한 사용), 없으면 `n_dead_tup`으로 추정합니다.
+- WAL 디렉터리 크기(`pg_ls_waldir`)와 아카이브 대기 세그먼트(`pg_ls_archive_statusdir`)도 `pg_monitor` 권한으로 읽습니다.
 - `pg_stat_statements`를 사용하려면 `postgresql.conf`에 `shared_preload_libraries = 'pg_stat_statements'` 설정 후 재시작이 필요합니다.
 - 대상 DB는 PG Insight 서버에서 접속할 수 있어야 합니다. 방화벽과 `pg_hba.conf`에서 해당 서버만 허용하고 `sslmode=require` 이상을 권장합니다.
 
@@ -215,7 +240,7 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
 - UI가 대상별 WebSocket room을 아직 구독하지 않아, 대시보드는 REST 폴링으로 갱신
 - 이메일 인증, 비밀번호 재설정, 계정 삭제 미구현
-- 서버가 만드는 문구(진단·보안 점검 결과, 권장 사항, 오류 메시지)는 아직 영어로만 제공
+- 서버가 만드는 문구(진단·보안 점검 결과, 권장 사항, 오류 메시지)는 아직 번역되지 않음 (Health Score 항목은 번역됨)
 - ESLint 설정 정리 필요, E2E 테스트(Playwright) 미구현
 
 ## License
