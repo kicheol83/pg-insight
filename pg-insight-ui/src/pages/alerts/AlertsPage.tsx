@@ -119,7 +119,6 @@ export default function AlertsPage() {
           <TargetSelector />
         </div>
 
-        {/* Active alerts banner */}
         {(activeEvents?.length ?? 0) > 0 && (
           <Card className="mb-5 border-red-300 dark:border-red-500/40">
             <div className="flex items-center gap-2 mb-3">

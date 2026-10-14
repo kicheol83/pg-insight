@@ -29,9 +29,9 @@ export class PrismaService
   async onModuleInit(): Promise<void> {
     try {
       await this.$connect();
-      this.logger.log('✅ Platform DB connected');
+      this.logger.log('Platform DB connected');
     } catch (error) {
-      this.logger.error('❌ Platform DB connection failed', error);
+      this.logger.error('Platform DB connection failed', error);
       throw error;
     }
   }

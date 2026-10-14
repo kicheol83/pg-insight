@@ -99,7 +99,6 @@ export default function TargetsPage() {
         }
       />
       <PageContent>
-        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
           {[
             {
@@ -139,7 +138,6 @@ export default function TargetsPage() {
           ))}
         </div>
 
-        {/* Targets grid */}
         {loading && !targets ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {[1, 2].map((i) => (

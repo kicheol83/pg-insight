@@ -148,7 +148,6 @@ export default function QueriesPage() {
               </Card>
             </div>
 
-            {/* Tag pills */}
             <div className="flex items-center gap-2 mb-4 flex-wrap">
               <span className="text-xs text-muted mr-1">
                 {t("queries.filter")}
@@ -188,7 +187,6 @@ export default function QueriesPage() {
               })}
             </div>
 
-            {/* Search + sort */}
             <div className="flex items-center gap-2 mb-4">
               <div className="relative flex-1 min-w-48">
                 <Filter

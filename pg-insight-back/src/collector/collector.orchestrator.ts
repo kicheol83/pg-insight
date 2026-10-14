@@ -6,16 +6,35 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TargetPoolManager } from '../targets/target-pool.manager';
-import { ConnectionCollector } from './collectors/connection.collector';
-import { QueryCollector } from './collectors/query.collector';
-import { LockCollector } from './collectors/lock.collector';
-import { TableCollector } from './collectors/table.collector';
-import { VacuumCollector } from './collectors/vacuum.collector';
-import { ReplicationCollector } from './collectors/replication.collector';
-import { IoBufferCollector } from './collectors/io-buffer.collector';
+import {
+  ConnectionCollector,
+  type ConnectionSnapshot,
+} from './collectors/connection.collector';
+import {
+  QueryCollector,
+  type QuerySnapshot,
+} from './collectors/query.collector';
+import { LockCollector, type LockSnapshot } from './collectors/lock.collector';
+import {
+  TableCollector,
+  type TableSnapshot,
+} from './collectors/table.collector';
+import {
+  VacuumCollector,
+  type VacuumSnapshot,
+} from './collectors/vacuum.collector';
+import {
+  ReplicationCollector,
+  type ReplicationSnapshot,
+} from './collectors/replication.collector';
+import {
+  IoBufferCollector,
+  type IoBufferSnapshot,
+} from './collectors/io-buffer.collector';
 import { SystemCollector } from './collectors/system.collector';
 import { MetricsWriterService } from '../metrics/writer/metrics-writer.service';
 import { RealtimeGateway } from '../real-time/real-time.gateway';
+import { AlertEngineService } from '../alerts/alert-engine.service';
 
 interface TargetIntervals {
   targetId: string;
@@ -27,6 +46,18 @@ interface TargetIntervals {
   replication?: NodeJS.Timeout;
   ioBuffer?: NodeJS.Timeout;
   system?: NodeJS.Timeout;
+  alerts?: NodeJS.Timeout;
+}
+
+interface LatestSnapshots {
+  connection?: ConnectionSnapshot;
+  query?: QuerySnapshot;
+  lock?: LockSnapshot;
+  table?: TableSnapshot;
+  vacuum?: VacuumSnapshot;
+  replication?: ReplicationSnapshot;
+  ioBuffer?: IoBufferSnapshot;
+  lastDeadlocksTotal?: number;
 }
 
 interface TargetErrorState {
@@ -44,21 +75,24 @@ interface CollectionIntervals {
   replicationMs: number;
   ioBufferMs: number;
   systemMs: number;
+  alertsMs: number;
 }
 
 const DEFAULT_INTERVALS: CollectionIntervals = {
-  connectionMs: 5_000, 
-  lockMs: 3_000, 
-  queryMs: 15_000, 
-  tableMs: 60_000, 
-  vacuumMs: 30_000, 
-  replicationMs: 5_000, 
-  ioBufferMs: 10_000, 
-  systemMs: 300_000, 
+  connectionMs: 5_000,
+  lockMs: 3_000,
+  queryMs: 15_000,
+  tableMs: 60_000,
+  vacuumMs: 30_000,
+  replicationMs: 5_000,
+  ioBufferMs: 10_000,
+  systemMs: 300_000,
+  alertsMs: 15_000,
 };
 
 const MAX_CONSECUTIVE_ERRORS = 3;
-const RETRY_DELAY_MS = 30_000; 
+const RETRY_DELAY_MS = 30_000;
+
 @Injectable()
 export class CollectorOrchestrator
   implements OnApplicationBootstrap, OnModuleDestroy
@@ -73,6 +107,8 @@ export class CollectorOrchestrator
 
   private readonly intervals: CollectionIntervals;
 
+  private readonly latest = new Map<string, LatestSnapshots>();
+
   constructor(
     private readonly poolManager: TargetPoolManager,
     private readonly connCollector: ConnectionCollector,
@@ -86,6 +122,7 @@ export class CollectorOrchestrator
     private readonly metricsWriter: MetricsWriterService,
     private readonly realtimeGateway: RealtimeGateway,
     private readonly config: ConfigService,
+    private readonly alertEngine: AlertEngineService,
   ) {
     this.intervals = {
       connectionMs: config.get(
@@ -105,11 +142,12 @@ export class CollectorOrchestrator
         DEFAULT_INTERVALS.ioBufferMs,
       ),
       systemMs: config.get('collector.systemMs', DEFAULT_INTERVALS.systemMs),
+      alertsMs: config.get('collector.alertsMs', DEFAULT_INTERVALS.alertsMs),
     };
   }
 
   async onApplicationBootstrap(): Promise<void> {
-    this.logger.log('🎬 CollectorOrchestrator starting...');
+    this.logger.log('CollectorOrchestrator starting');
 
     const entries = this.poolManager.getAllEntries();
     const paused = new Set(await this.poolManager.pausedTargetIds());
@@ -143,7 +181,6 @@ export class CollectorOrchestrator
     this.logger.log('All collection intervals cleared');
   }
 
-
   async startCollection(targetId: string): Promise<void> {
     if (this.targetIntervals.has(targetId)) {
       this.logger.warn(
@@ -152,9 +189,7 @@ export class CollectorOrchestrator
       return;
     }
 
-    this.logger.log(
-      `▶Starting collection for target: ${targetId.slice(0, 8)}`,
-    );
+    this.logger.log(`▶Starting collection for target: ${targetId.slice(0, 8)}`);
 
     this.errorStates.set(targetId, { consecutiveErrors: 0 });
 
@@ -219,6 +254,11 @@ export class CollectorOrchestrator
       this.intervals.systemMs,
     );
 
+    intervals.alerts = setInterval(
+      () => void this.evaluateAlerts(targetId),
+      this.intervals.alertsMs,
+    );
+
     this.targetIntervals.set(targetId, intervals);
 
     setTimeout(
@@ -240,21 +280,21 @@ export class CollectorOrchestrator
     if (intervals.replication) clearInterval(intervals.replication);
     if (intervals.ioBuffer) clearInterval(intervals.ioBuffer);
     if (intervals.system) clearInterval(intervals.system);
+    if (intervals.alerts) clearInterval(intervals.alerts);
 
     this.targetIntervals.delete(targetId);
+    this.latest.delete(targetId);
     this.errorStates.delete(targetId);
 
     const reconnectTimer = this.reconnectTimers.get(targetId);
     if (reconnectTimer) clearTimeout(reconnectTimer);
     this.reconnectTimers.delete(targetId);
 
-    this.logger.log(
-      `Collection stopped for target: ${targetId.slice(0, 8)}`,
-    );
+    this.logger.log(`Collection stopped for target: ${targetId.slice(0, 8)}`);
   }
 
   async refreshTarget(targetId: string): Promise<void> {
-    this.logger.log(`🔄 Manual refresh for target: ${targetId.slice(0, 8)}`);
+    this.logger.log(`Manual refresh for target: ${targetId.slice(0, 8)}`);
 
     await Promise.allSettled([
       this.collectConnection(targetId),
@@ -321,7 +361,7 @@ export class CollectorOrchestrator
       if (!this.targetIntervals.has(targetId)) return;
 
       this.logger.log(
-        `🔌 Attempting reconnect for target: ${targetId.slice(0, 8)}`,
+        `Attempting reconnect for target: ${targetId.slice(0, 8)}`,
       );
       try {
         await this.poolManager.reconnect(targetId);
@@ -341,10 +381,45 @@ export class CollectorOrchestrator
     this.reconnectTimers.set(targetId, timer);
   }
 
+  private remember<K extends keyof LatestSnapshots>(
+    targetId: string,
+    key: K,
+    value: LatestSnapshots[K],
+  ): void {
+    const entry = this.latest.get(targetId) ?? {};
+    entry[key] = value;
+    this.latest.set(targetId, entry);
+  }
+
+  async evaluateAlerts(targetId: string): Promise<void> {
+    const snapshots = this.latest.get(targetId);
+    if (!snapshots) return;
+
+    let deadlocksDelta: number | undefined;
+    const total = snapshots.lock?.deadlocksTotal;
+    if (total !== undefined) {
+      const previous = snapshots.lastDeadlocksTotal;
+      deadlocksDelta =
+        previous === undefined ? undefined : Math.max(0, total - previous);
+      snapshots.lastDeadlocksTotal = total;
+    }
+
+    try {
+      await this.alertEngine.evaluate(
+        targetId,
+        AlertEngineService.buildMetricValues({ ...snapshots, deadlocksDelta }),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Alert evaluation failed for ${targetId.slice(0, 8)}: ${(error as Error).message}`,
+      );
+    }
+  }
 
   private async collectConnection(targetId: string): Promise<void> {
     const result = await this.connCollector.run(targetId);
     if (!result.data) return;
+    this.remember(targetId, 'connection', result.data);
 
     await this.metricsWriter.writeConnectionSnapshot(targetId, result.data);
 
@@ -363,6 +438,7 @@ export class CollectorOrchestrator
   private async collectLock(targetId: string): Promise<void> {
     const result = await this.lockCollector.run(targetId);
     if (!result.data) return;
+    this.remember(targetId, 'lock', result.data);
 
     await this.metricsWriter.writeLockSnapshot(targetId, result.data);
 
@@ -380,6 +456,7 @@ export class CollectorOrchestrator
   private async collectQuery(targetId: string): Promise<void> {
     const result = await this.queryCollector.run(targetId);
     if (!result.data) return;
+    this.remember(targetId, 'query', result.data);
 
     await this.metricsWriter.writeQuerySnapshot(targetId, result.data);
 
@@ -396,6 +473,7 @@ export class CollectorOrchestrator
   private async collectTable(targetId: string): Promise<void> {
     const result = await this.tableCollector.run(targetId);
     if (!result.data) return;
+    this.remember(targetId, 'table', result.data);
 
     await this.metricsWriter.writeTableSnapshot(targetId, result.data);
 
@@ -415,6 +493,7 @@ export class CollectorOrchestrator
   private async collectVacuum(targetId: string): Promise<void> {
     const result = await this.vacuumCollector.run(targetId);
     if (!result.data) return;
+    this.remember(targetId, 'vacuum', result.data);
 
     await this.metricsWriter.writeVacuumSnapshot(targetId, result.data);
 
@@ -431,6 +510,7 @@ export class CollectorOrchestrator
   private async collectReplication(targetId: string): Promise<void> {
     const result = await this.replicationCollector.run(targetId);
     if (!result.data) return;
+    this.remember(targetId, 'replication', result.data);
 
     await this.metricsWriter.writeReplicationSnapshot(targetId, result.data);
 
@@ -446,6 +526,7 @@ export class CollectorOrchestrator
   private async collectIoBuffer(targetId: string): Promise<void> {
     const result = await this.ioBufferCollector.run(targetId);
     if (!result.data) return;
+    this.remember(targetId, 'ioBuffer', result.data);
 
     await this.metricsWriter.writeIoBufferSnapshot(targetId, result.data);
   }

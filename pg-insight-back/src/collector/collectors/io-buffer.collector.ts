@@ -21,7 +21,7 @@ export interface DatabaseIoStats {
   dbName: string;
   blksRead: number;
   blksHit: number;
-  cacheHitRatio: number; // 0-1
+  cacheHitRatio: number;
   transactionsTotal: number;
   commits: number;
   rollbacks: number;
@@ -42,14 +42,14 @@ export interface BufferCacheTopEntry {
 }
 
 export interface IoSettings {
-  sharedBuffersMb: number; // shared_buffers in MB
-  effectiveCacheSize: number; // effective_cache_size MB (planner hint)
-  checkpointTimeout: number; // seconds
-  checkpointCompletionTarget: number; // 0.0-1.0
+  sharedBuffersMb: number;
+  effectiveCacheSize: number;
+  checkpointTimeout: number;
+  checkpointCompletionTarget: number;
   walBuffersMb: number;
   bgwriterLruMaxpages: number;
-  bgwriterDelay: number; // ms
-  synchronousCommit: string; // on | off | local | ...
+  bgwriterDelay: number;
+  synchronousCommit: string;
 }
 
 export interface IoBufferSnapshot {

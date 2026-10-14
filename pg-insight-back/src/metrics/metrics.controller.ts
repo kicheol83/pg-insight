@@ -1,18 +1,3 @@
-// ══════════════════════════════════════════════════════════════
-// src/metrics/metrics.controller.ts
-//
-// REST API — TimescaleDB'dagi tarixiy metrikalar (collector yozgan)
-//   GET /api/v1/metrics/:targetId/dashboard
-//   GET /api/v1/metrics/:targetId/connections/trend
-//   GET /api/v1/metrics/:targetId/locks/trend
-//   GET /api/v1/metrics/:targetId/cache-hit
-//   GET /api/v1/metrics/:targetId/table-bloat
-//   GET /api/v1/metrics/:targetId/replication
-//   GET /api/v1/metrics/:targetId/xid-age
-//   GET /api/v1/metrics/:targetId/connections-by-app
-//   GET /api/v1/metrics/:targetId/query-volume
-// ══════════════════════════════════════════════════════════════
-
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { MetricsReaderService } from './reader/metrics-reader.service';

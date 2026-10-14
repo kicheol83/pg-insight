@@ -321,7 +321,6 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Health indicators */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-5">
           <Card padding="sm" className="flex items-center gap-3">
             <div className="p-2 bg-purple-500/10 rounded-lg shrink-0">
@@ -396,7 +395,6 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Charts */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
           <Card>
             <CardHeader
@@ -555,7 +553,6 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Table bloat */}
         {((
           bloatTop as Array<{
             tableName: string;

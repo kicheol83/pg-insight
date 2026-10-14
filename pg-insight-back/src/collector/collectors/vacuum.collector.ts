@@ -54,9 +54,9 @@ export interface VacuumSnapshot {
   };
 }
 
-const XID_WARNING = 500_000_000; // 500M
-const XID_CRITICAL = 1_000_000_000; // 1B
-const XID_EMERGENCY = 1_500_000_000; // 1.5B
+const XID_WARNING = 500_000_000;
+const XID_CRITICAL = 1_000_000_000;
+const XID_EMERGENCY = 1_500_000_000;
 
 @Injectable()
 export class VacuumCollector extends BaseCollector<VacuumSnapshot> {
@@ -86,7 +86,7 @@ export class VacuumCollector extends BaseCollector<VacuumSnapshot> {
       const critical = xidData.filter((t) => t.age > XID_CRITICAL);
       if (critical.length > 0) {
         this.logger.error(
-          `🚨 XID WRAPAROUND RISK! ${critical.length} tables with age > 1B: ` +
+          `XID wraparound risk: ${critical.length} tables with age > 1B: ` +
             critical
               .slice(0, 3)
               .map((t) => t.tableName)

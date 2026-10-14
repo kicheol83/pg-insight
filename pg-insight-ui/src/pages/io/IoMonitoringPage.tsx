@@ -124,7 +124,6 @@ export default function IoMonitoringPage() {
 
         {data?.pgStatIoAvailable ? (
           <>
-            {/* Backend turi bo'yicha xulosa */}
             <Card className="mb-5">
               <CardHeader
                 title={t("io.byBackendTitle")}
@@ -172,7 +171,6 @@ export default function IoMonitoringPage() {
               )}
             </Card>
 
-            {/* Batafsil jadval */}
             <Card>
               <CardHeader
                 title={t("io.detailTitle")}

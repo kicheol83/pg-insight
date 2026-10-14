@@ -179,7 +179,7 @@ describe('AuthService', () => {
         }),
       );
       expect(result.accessToken).toBe('fake.jwt.token');
-      expect(refreshTokenModel.create).toHaveBeenCalled(); // yangi token yaratildi
+      expect(refreshTokenModel.create).toHaveBeenCalled();
     });
   });
 

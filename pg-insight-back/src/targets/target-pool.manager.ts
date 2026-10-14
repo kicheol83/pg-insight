@@ -60,7 +60,7 @@ export class TargetPoolManager implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    this.logger.log('🔌 TargetPoolManager initializing...');
+    this.logger.log('TargetPoolManager initializing');
 
     const targets = await this.targetDelegate().findMany({
       where: { isActive: true },
@@ -141,7 +141,7 @@ export class TargetPoolManager implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    this.logger.log('🔌 Draining all connection pools...');
+    this.logger.log('Draining all connection pools');
 
     await Promise.allSettled(
       Array.from(this.pools.values()).map((entry) =>

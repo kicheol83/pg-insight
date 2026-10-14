@@ -231,7 +231,6 @@ export default function SettingsPage() {
           <TargetSelector />
         </div>
 
-        {/* Config issues */}
         {(sys?.configIssues?.length ?? 0) > 0 && (
           <Card className="mb-5">
             <CardHeader

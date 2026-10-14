@@ -38,9 +38,9 @@ describe('LiveQueryService', () => {
 
   function mockSuccessfulExplain() {
     mockClient.query
-      .mockResolvedValueOnce(undefined) // BEGIN
-      .mockResolvedValueOnce({ rows: [{ 'QUERY PLAN': { Plan: {} } }] }) // EXPLAIN
-      .mockResolvedValueOnce(undefined); // ROLLBACK
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ 'QUERY PLAN': { Plan: {} } }] })
+      .mockResolvedValueOnce(undefined);
   }
 
   describe('explainQuery — xavfsizlik filtri', () => {
@@ -175,11 +175,11 @@ describe('LiveQueryService', () => {
 
     it('translates a Postgres read-only-transaction error into a friendly message', async () => {
       mockClient.query
-        .mockResolvedValueOnce(undefined) // BEGIN
+        .mockResolvedValueOnce(undefined)
         .mockRejectedValueOnce(
           new Error('cannot execute UPDATE in a read-only transaction'),
         )
-        .mockResolvedValueOnce(undefined); // ROLLBACK (in catch)
+        .mockResolvedValueOnce(undefined);
 
       await expect(
         service.explainQuery('target-1', 'SELECT * FROM users'),
@@ -353,7 +353,7 @@ describe('LiveQueryService — getDiagnostics', () => {
     poolManager.query.mockImplementation(async (_id: string, sql: string) => {
       if (sql.includes('server_version_num'))
         return [{ server_version_num: '160001' }];
-      if (sql.includes('pg_extension')) return [{ exists: false }]; // warning: missing extension
+      if (sql.includes('pg_extension')) return [{ exists: false }];
       return [];
     });
 
@@ -571,7 +571,7 @@ describe('LiveQueryService — getIoStats', () => {
   it('uses pg_stat_io on PostgreSQL 16+', async () => {
     poolManager.getEntry.mockReturnValue({ pgVersionNum: 160001 });
     poolManager.query
-      .mockResolvedValueOnce([{ setting: 'on' }]) // track_io_timing
+      .mockResolvedValueOnce([{ setting: 'on' }])
       .mockResolvedValueOnce([
         {
           backend_type: 'client backend',
@@ -619,7 +619,7 @@ describe('LiveQueryService — getIoStats', () => {
   it('falls back to pg_statio_user_tables on PostgreSQL versions older than 16', async () => {
     poolManager.getEntry.mockReturnValue({ pgVersionNum: 150000 });
     poolManager.query
-      .mockResolvedValueOnce([{ setting: 'off' }]) // track_io_timing
+      .mockResolvedValueOnce([{ setting: 'off' }])
       .mockResolvedValueOnce([
         {
           heap_blks_read: 100,
@@ -636,18 +636,16 @@ describe('LiveQueryService — getIoStats', () => {
     expect(result.source).toBe('pg_statio_fallback');
     expect(result.pgStatIoAvailable).toBe(false);
     expect(result.fallback).toBeDefined();
-    // (900+450) hit / (150+1350) total = 1350/1500 = 0.9
     expect(result.fallback!.cacheHitRatio).toBeCloseTo(0.9);
   });
 
   it('falls back gracefully even on PG16+ if pg_stat_io query itself fails', async () => {
     poolManager.getEntry.mockReturnValue({ pgVersionNum: 160001 });
     poolManager.query
-      .mockResolvedValueOnce([{ setting: 'on' }]) // track_io_timing
+      .mockResolvedValueOnce([{ setting: 'on' }])
       .mockRejectedValueOnce(new Error('permission denied for view pg_stat_io'))
       .mockResolvedValueOnce([
         {
-          // fallback query
           heap_blks_read: 10,
           heap_blks_hit: 90,
           idx_blks_read: 0,
@@ -663,7 +661,7 @@ describe('LiveQueryService — getIoStats', () => {
   });
 
   it('does not attempt pg_stat_io at all when version is unknown (defensive default)', async () => {
-    poolManager.getEntry.mockReturnValue(null); // getEntry returns null — no version info
+    poolManager.getEntry.mockReturnValue(null);
     poolManager.query
       .mockResolvedValueOnce([{ setting: 'off' }])
       .mockResolvedValueOnce([
@@ -750,10 +748,10 @@ describe('LiveQueryService — getJobProgress', () => {
       .mockResolvedValueOnce([])
       .mockRejectedValueOnce(
         new Error('relation "pg_stat_progress_analyze" does not exist'),
-      ) // PG12'da yo'q
+      )
       .mockRejectedValueOnce(
         new Error('relation "pg_stat_progress_copy" does not exist'),
-      ); // PG12'da yo'q
+      );
 
     const result = await service.getJobProgress('target-1');
 
@@ -817,7 +815,6 @@ describe('LiveQueryService — getHealthScore', () => {
 
   function mockAllHealthy() {
     poolManager.query.mockImplementation(async (_id: string, sql: string) => {
-      // getVacuumProgress ichidagi so'rovlar
       if (sql.includes('pg_stat_progress_vacuum')) return [];
       if (
         sql.includes("nspname NOT IN ('pg_catalog'") &&
@@ -828,11 +825,9 @@ describe('LiveQueryService — getHealthScore', () => {
       if (sql.includes("name IN ('autovacuum'"))
         return [{ name: 'autovacuum', setting: 'on' }];
       if (sql.includes("query ILIKE 'autovacuum%'")) return [{ cnt: '0' }];
-      // getTableStats
       if (sql.includes('pg_stat_user_tables')) return [];
       if (sql.includes('reloptions')) return [];
       if (sql.includes('pg_stat_user_indexes')) return [];
-      // getDatabaseStats
       if (sql.includes('pg_stat_database'))
         return [
           {
@@ -858,13 +853,25 @@ describe('LiveQueryService — getHealthScore', () => {
           },
         ];
       if (sql.includes("name = 'track_io_timing'")) return [{ setting: 'on' }];
-      // getReplication
-      if (sql.includes('pg_is_in_recovery')) return [{ is_recovery: false }];
+      if (sql.includes('pg_is_in_recovery'))
+        return [{ is_recovery: false, sync_names: '', archive_mode: 'on' }];
+      if (sql.includes('pg_stat_archiver'))
+        return [
+          {
+            archived_count: '120',
+            last_archived_wal: '000000010000000000000078',
+            last_archived_time: new Date().toISOString(),
+            failed_count: '0',
+            last_failed_wal: null,
+            last_failed_time: null,
+            last_archived_age_s: '12',
+          },
+        ];
+      if (sql.includes('pg_ls_archive_statusdir')) return [{ ready: '0' }];
       if (sql.includes('pg_current_wal_lsn') && sql.includes('0/0'))
         return [{ size: '0' }];
       if (sql.includes('pg_stat_replication')) return [];
       if (sql.includes('pg_replication_slots')) return [];
-      // getConnections
       if (
         sql.includes('pg_stat_activity') &&
         sql.includes('pid != pg_backend_pid()')
@@ -888,7 +895,7 @@ describe('LiveQueryService — getHealthScore', () => {
   it('deducts heavily and grades "poor" when XID age is at emergency level', async () => {
     mockAllHealthy();
     poolManager.query.mockImplementation(async (_id: string, sql: string) => {
-      if (sql.includes('age(datfrozenxid)')) return [{ age: '1800000000' }]; // 1.8B — emergency
+      if (sql.includes('age(datfrozenxid)')) return [{ age: '1800000000' }];
       if (sql.includes('pg_stat_progress_vacuum')) return [];
       if (sql.includes('age(c.relfrozenxid)')) return [];
       if (sql.includes("name IN ('autovacuum'"))

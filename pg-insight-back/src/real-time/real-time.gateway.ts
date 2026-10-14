@@ -54,7 +54,7 @@ export class RealtimeGateway
         })
         .catch(() => next(new Error('Unauthorized')));
     });
-    this.logger.log('🔌 WebSocket Gateway initialized at /metrics');
+    this.logger.log('WebSocket gateway initialized at /metrics');
   }
 
   handleConnection(client: Socket): void {

@@ -1,12 +1,3 @@
-// ══════════════════════════════════════════════════════════════
-// backup.service.spec.ts
-//
-// child_process.spawn'ni to'liq mock qilamiz — EventEmitter kabi
-// ishlaydigan soxta process yaratamiz va 'close'/'error' hodisalarini
-// qo'lda chaqirib, BackupService'ning bu hodisalarga to'g'ri
-// reaksiya qilishini (DB yozuvini yangilash) tekshiramiz.
-// ══════════════════════════════════════════════════════════════
-
 import { EventEmitter } from 'node:events';
 import { Test } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
@@ -27,8 +18,6 @@ jest.mock('node:fs', () => ({
 import { spawn } from 'node:child_process';
 import { unlink } from 'node:fs/promises';
 
-// Bir tikni kutish — fire-and-forget async callback (child.on('close', async ...))
-// tugashini kutish uchun
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
 function createMockChild() {
@@ -360,8 +349,6 @@ describe('BackupService', () => {
   });
 });
 
-// Test uchun oddiy "shifrlash" — haqiqiy crypto.util funksiyasini
-// chaqiramiz, shunda BackupService haqiqiy decrypt() bilan mos ishlaydi
 function encryptForTest(plaintext: string): string {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { encrypt, getEncryptionKey } = require('../common/crypto.util');

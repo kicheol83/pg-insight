@@ -17,7 +17,6 @@ export class MaintenanceService {
     private readonly audit: AuditService,
   ) {}
 
-  // ── VACUUM (ANALYZE) bitta jadvalga ────────────────────────────
   async vacuumTable(
     targetId: string,
     schema: string,
@@ -53,7 +52,6 @@ export class MaintenanceService {
     return { started: true, target: `${schema}.${table}` };
   }
 
-  // ── DROP INDEX CONCURRENTLY — faqat ishlatilmayotgan indekslar ──
   async dropUnusedIndex(
     targetId: string,
     schema: string,
@@ -61,11 +59,8 @@ export class MaintenanceService {
     userId: string,
     userEmail: string,
   ): Promise<{ started: true; index: string }> {
-    await this.assertRelationExists(targetId, schema, index, 'i'); // 'i' = indeks
+    await this.assertRelationExists(targetId, schema, index, 'i');
 
-    // Server tomonida QAYTA tekshiruv — client'dan kelgan "unused"
-    // degan ma'lumot eskirgan bo'lishi mumkin. Bu indeks haqiqatan
-    // hozir ham ishlatilmayotganini o'zimiz tasdiqlaymiz.
     const usageRows = await this.poolManager.query<{ idx_scan: string }>(
       targetId,
       `
@@ -81,9 +76,6 @@ export class MaintenanceService {
       );
     }
 
-    // Primary key yoki unique constraint'ga tegishli indeksni
-    // o'chirishga yo'l qo'ymaymiz — bu odatda ma'lumot yaxlitligini
-    // ta'minlaydi va tasodifan o'chirilishi og'ir oqibatlarga olib kelishi mumkin
     const constraintRows = await this.poolManager.query<{ exists: boolean }>(
       targetId,
       `
@@ -128,8 +120,6 @@ export class MaintenanceService {
     return { started: true, index: `${schema}.${index}` };
   }
 
-  // ── Identifikator haqiqatan mavjudligini tasdiqlash ──────────────
-  // relkind: 'r' = oddiy jadval, 'i' = indeks
   private async assertRelationExists(
     targetId: string,
     schema: string,
@@ -156,10 +146,6 @@ export class MaintenanceService {
     }
   }
 
-  // ── Fon rejimida ishga tushirish ──────────────────────────────
-  // pool.query() natijasini HTTP javobi kutmasdan chaqiramiz —
-  // VACUUM/REINDEX daqiqalab davom etishi mumkin, foydalanuvchini
-  // kutdirmaymiz. onDone callback audit-log yozish uchun.
   private runInBackground(
     targetId: string,
     sql: string,
@@ -179,7 +165,6 @@ export class MaintenanceService {
         return onDone(false, err.message);
       })
       .catch((err) => {
-        // onDone'ning o'zi (audit yozish) xato bersa ham dasturni yiqitmaymiz
         this.logger.error(
           `Failed to record maintenance audit log: ${(err as Error).message}`,
         );

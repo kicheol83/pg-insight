@@ -353,5 +353,5 @@ WHERE time >= NOW() - INTERVAL '5 minutes'
 ORDER BY max_wait_ms DESC;
 
 DO $$ BEGIN
-  RAISE NOTICE '✅ Platform DB schema initialized successfully';
+  RAISE NOTICE 'Platform DB schema initialized';
 END $$;
