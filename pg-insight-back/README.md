@@ -1,4 +1,4 @@
-# PG Insight — backend
+# PG Insight backend
 
 NestJS API for [PG Insight](../README.en.md), an open-source multi-tenant PostgreSQL monitoring service. Users register their own PostgreSQL instances and get dashboards for connections, slow queries, locks, table bloat, vacuum/XID health, replication lag and threshold-based alerting.
 
@@ -11,8 +11,8 @@ NestJS API for [PG Insight](../README.en.md), an open-source multi-tenant Postgr
 
 Two Postgres databases:
 
-- **Platform DB** (`pg_insight_platform`) — users, target credentials (AES-256-GCM encrypted), alert rules, alert events, audit logs. Managed via Prisma.
-- **Metrics DB** (`pg_insight_metrics`, TimescaleDB) — collected time-series metrics as hypertables with compression and retention policies (`docker/init-platform.sql`, applied on the first boot of the metrics container).
+- **Platform DB** (`pg_insight_platform`): users, target credentials (AES-256-GCM encrypted), alert rules, alert events, audit logs. Managed via Prisma.
+- **Metrics DB** (`pg_insight_metrics`, TimescaleDB): collected time-series metrics as hypertables with compression and retention policies (`docker/init-platform.sql`, applied on the first boot of the metrics container).
 
 For each monitored target, `TargetPoolManager` keeps a small `pg.Pool` (max 5 connections) open. Two ways this pool is used:
 
@@ -51,7 +51,7 @@ npm run start:dev             # http://localhost:3000/api/v1
 
 cd ../pg-insight-ui
 npm install
-npm run dev                   # http://localhost:5173 — redirects to /login
+npm run dev                   # http://localhost:5173, redirects to /login
 ```
 
 Swagger API docs: `http://localhost:3000/api/docs` (basic auth with `SWAGGER_USER`/`SWAGGER_PASSWORD` in production).
@@ -88,13 +88,13 @@ TEST_TARGET_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres 
 
 24 suites, 188 tests. Highlights:
 
-- `auth/admin-routes.spec.ts` — reads controller metadata and fails if a mutating route has neither an ownership check nor the admin guard
-- `auth/target-access.*.spec.ts` — guard unit tests and HTTP tests for 404 on foreign targets
-- `auth/signup-throttle.http.spec.ts` — the sixth sign-up from one address gets 429; a smuggled `role` gets 400
-- `targets/target-host.policy.spec.ts` — private, link-local, CGNAT, IPv6 and internal-name rejection
-- `collector/collector.lifecycle.spec.ts` — reproduces the restart bug where collection started before pools connected
-- `real-time/real-time.gateway.spec.ts` — handshake JWT, ownership on subscribe, room-only emits
-- `live/live-query.explain.spec.ts`, `collector/collectors/lock.collector.spec.ts` — run against a real PostgreSQL when `TEST_TARGET_DATABASE_URL` is set, skipped otherwise
+- `auth/admin-routes.spec.ts`: reads controller metadata and fails if a mutating route has neither an ownership check nor the admin guard
+- `auth/target-access.*.spec.ts`: guard unit tests and HTTP tests for 404 on foreign targets
+- `auth/signup-throttle.http.spec.ts`: the sixth sign-up from one address gets 429; a smuggled `role` gets 400
+- `targets/target-host.policy.spec.ts`: private, link-local, CGNAT, IPv6 and internal-name rejection
+- `collector/collector.lifecycle.spec.ts`: reproduces the restart bug where collection started before pools connected
+- `real-time/real-time.gateway.spec.ts`: handshake JWT, ownership on subscribe, room-only emits
+- `live/live-query.explain.spec.ts`, `collector/collectors/lock.collector.spec.ts`: run against a real PostgreSQL when `TEST_TARGET_DATABASE_URL` is set, skipped otherwise
 
 `@prisma/client` is mapped to `test-mocks/prisma-client.stub.js` in `jest.config.js`; `PrismaService` is always replaced with a mock in each spec. `moduleFileExtensions` lists `ts` before `js` so a stale compiled `.js` next to a `.ts` file is never picked up.
 
@@ -102,7 +102,7 @@ CI (`/.github/workflows/ci.yml` at the repository root) runs `prisma generate`, 
 
 ## Health checks
 
-`GET /api/v1/health` checks both databases and returns 503 if either is unreachable — use it as the readiness probe (the deploy scripts do). `GET /api/v1/health/live` is a plain liveness probe without database checks.
+`GET /api/v1/health` checks both databases and returns 503 if either is unreachable. Use it as the readiness probe (the deploy scripts do). `GET /api/v1/health/live` is a plain liveness probe without database checks.
 
 ## Rotating the encryption key
 
@@ -165,7 +165,7 @@ src/
 
 ## Why raw SQL, not an ORM, for target queries?
 
-Every query in `live-query.service.ts` and the collectors runs against a database whose schema PG Insight doesn't own — it introspects arbitrary Postgres instances via system catalogs (`pg_stat_activity`, `pg_locks`, `pg_stat_user_tables`, …). An ORM adds no value there; Prisma is used only for the platform's own tables.
+Every query in `live-query.service.ts` and the collectors runs against a database whose schema PG Insight doesn't own: it introspects arbitrary Postgres instances via system catalogs (`pg_stat_activity`, `pg_locks`, `pg_stat_user_tables`, …). An ORM adds no value there; Prisma is used only for the platform's own tables.
 
 ## Known limitations
 
@@ -175,4 +175,4 @@ Every query in `live-query.service.ts` and the collectors runs against a databas
 
 ## License
 
-MIT — see [`LICENSE`](../LICENSE). Contributions welcome, see [`CONTRIBUTING.md`](../CONTRIBUTING.md).
+MIT, see [`LICENSE`](../LICENSE). Contributions welcome, see [`CONTRIBUTING.md`](../CONTRIBUTING.md).

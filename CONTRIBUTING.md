@@ -39,7 +39,7 @@ Set `TEST_TARGET_DATABASE_URL` to a disposable PostgreSQL database to also run t
 - **Tenancy**: every route that touches a target must be covered by `TargetAccessGuard`. Routes with `:targetId` are checked automatically; routes keyed by another ID need `@TargetAccess(...)`. `src/auth/admin-routes.spec.ts` fails if a mutating route has neither an ownership check nor `AdminGuard`.
 - **Target connections**: connect only through `TargetPoolManager` / `TargetsService.testConnection`, which apply `TargetHostPolicy`. Never open a `pg` client to a user-supplied host directly.
 - **Arbitrary SQL**: endpoints that run user-submitted SQL or touch target credentials must call `AuditService.record()`.
-- **Raw SQL for targets**: no ORM for target-facing queries (`src/live/`, `src/collector/`) — they read system catalogs of databases PG Insight doesn't own. Prisma is only for the platform's own tables.
+- **Raw SQL for targets**: no ORM for target-facing queries (`src/live/`, `src/collector/`), because they read system catalogs of databases PG Insight doesn't own. Prisma is only for the platform's own tables.
 - **Collectors** return snapshots only; writing happens in `MetricsWriterService`.
 
 ## Adding a new collector

@@ -4,7 +4,9 @@
 
 오픈소스 멀티테넌트 PostgreSQL 모니터링 서비스입니다. 누구나 가입한 뒤 자신의 PostgreSQL 접속 정보를 등록하면 커넥션, 슬로우 쿼리, 락, 테이블 블로트, VACUUM/XID 상태, 복제 지연을 대시보드로 확인하고 임계값 기반 알림을 받을 수 있습니다. 각 사용자는 자신이 등록한 대상만 볼 수 있습니다.
 
-**Live:** https://pginsight.javohir.dev — 회원가입 후 바로 사용할 수 있습니다 (계정당 대상 3개, 공인 주소만 등록 가능).
+**Live:** https://pginsight.javohir.dev
+
+회원가입 후 바로 사용할 수 있습니다 (계정당 대상 3개, 공인 주소만 등록 가능).
 
 ## 주요 기능
 
@@ -153,8 +155,8 @@ http://localhost:5173 에 접속하면 로그인 화면에서 첫 번째 관리�
 | pgBackRest 저장소 호스트 중지 후 WAL 스위치 | WAL 아카이빙 실패(-15점), Health Score 85 → 70. 저장소를 다시 켜면 다음 아카이브 성공 후 정상으로 복귀 |
 | `idempotency_keys` 240 MB, 만료 키 절반 삭제 + VACUUM 이후 | `n_dead_tup` 기준 "VACUUM 필요" 0개, `pgstattuple_approx`는 빈 공간 49.1% (118 MB) 측정, 35 ms 소요 |
 
-![복제 — primary](./docs/images/replication-primary.ko.png)
-![복제 — standby](./docs/images/replication-standby.ko.png)
+![복제: primary](./docs/images/replication-primary.ko.png)
+![복제: standby](./docs/images/replication-standby.ko.png)
 ![테이블 블로트 측정](./docs/images/tables-bloat.ko.png)
 ![WAL 아카이빙 실패 시 Health Score](./docs/images/health-archive-failing.ko.png)
 

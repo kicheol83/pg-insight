@@ -4,7 +4,9 @@
 
 An open-source, multi-tenant PostgreSQL monitoring service. Anyone can sign up, register their own PostgreSQL connection and get dashboards for connections, slow queries, locks, table bloat, VACUUM/XID health and replication lag, plus threshold-based alerting. Each user sees only the targets they registered.
 
-**Live:** https://pginsight.javohir.dev — sign up and start right away (3 targets per account, public addresses only).
+**Live:** https://pginsight.javohir.dev
+
+Sign up and start right away (3 targets per account, public addresses only).
 
 ## Features
 
