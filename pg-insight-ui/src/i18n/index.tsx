@@ -9,6 +9,10 @@ const STORAGE_KEY = "pg-insight-locale";
 
 export type TranslateParams = Record<string, string | number>;
 
+export function isMessageKey(key: string): key is MessageKey {
+  return Object.prototype.hasOwnProperty.call(messages, key);
+}
+
 export function translate(
   locale: Locale,
   key: MessageKey,

@@ -33,6 +33,7 @@ import { fmtBytes, fmtNum, fmtRelative, cn } from "@/lib/format";
 import { useI18n, type MessageKey } from "@/i18n";
 import { severityBadge } from "@/lib/colors";
 import type { TableStat, IndexStat, TableRecommendation } from "@/types/model";
+import { BloatCard } from "./BloatCard";
 
 const SEVERITY_LABELS: Record<TableRecommendation["severity"], MessageKey> = {
   critical: "tables.severity.critical",
@@ -297,6 +298,10 @@ export default function TablesPage() {
               ))}
             </div>
           </Card>
+        )}
+
+        {activeTargetId && (
+          <BloatCard key={activeTargetId} targetId={activeTargetId} />
         )}
 
         <Modal

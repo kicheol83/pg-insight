@@ -17,6 +17,7 @@ import { locks } from "./locks";
 import { vacuum } from "./vacuum";
 import { replication } from "./replication";
 import { jobProgress } from "./jobProgress";
+import { health } from "./health";
 
 export const messages = {
   ...common,
@@ -37,6 +38,7 @@ export const messages = {
   ...vacuum,
   ...replication,
   ...jobProgress,
+  ...health,
 } satisfies Dictionary;
 
 export type MessageKey = keyof typeof messages;

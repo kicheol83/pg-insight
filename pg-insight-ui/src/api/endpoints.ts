@@ -8,6 +8,7 @@ import type {
   BlockingChain,
   LockSnapshot,
   TableSnapshot,
+  TableBloatReport,
   VacuumSnapshot,
   ReplicationSnapshot,
   AlertRule,
@@ -113,6 +114,10 @@ export const liveApi = {
     http.get<LockSnapshot>(`/live/${tid}/locks`).then((r) => r.data),
   tableStats: (tid: string) =>
     http.get<TableSnapshot>(`/live/${tid}/tables`).then((r) => r.data),
+  tableBloat: (tid: string) =>
+    http
+      .get<TableBloatReport>(`/live/${tid}/tables/bloat`)
+      .then((r) => r.data),
   vacuumProgress: (tid: string) =>
     http
       .get<VacuumSnapshot>(`/live/${tid}/vacuum/progress`)

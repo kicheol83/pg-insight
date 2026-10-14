@@ -183,6 +183,9 @@ export interface VacuumSnapshot {
   maxXidAge: number;
   databaseAge: number;
   hasXidRisk: boolean;
+  databaseMxidAge?: number;
+  maxMxidAge?: number;
+  hasMxidRisk?: boolean;
   autovacuum: {
     activeWorkers: number;
     maxWorkers: number;
@@ -194,6 +197,7 @@ export interface VacuumSnapshot {
     autovacuumMaxWorkers: number;
     vacuumFreezeMaxAge: number;
     autovacuumFreezeMaxAge: number;
+    autovacuumMultixactFreezeMaxAge?: number;
   };
 }
 
@@ -203,6 +207,7 @@ export interface ReplicaInfo {
   applicationName: string;
   state: string;
   syncState: string;
+  syncPriority?: number;
   writeLagBytes: number;
   flushLagBytes: number;
   replayLagBytes: number;
@@ -211,6 +216,7 @@ export interface ReplicaInfo {
   flushLagMs: number | null;
   replayLagMs: number | null;
   replyTime: string | null;
+  replyAgeSec?: number | null;
 }
 
 export interface ReplicationSlot {
@@ -220,8 +226,63 @@ export interface ReplicationSlot {
   active: boolean;
   activePid: number | null;
   walBytes: number;
+  walStatus?: string | null;
+  safeWalSizeBytes?: number | null;
   isBlocking: boolean;
   database: string | null;
+}
+
+export interface ArchiverStatus {
+  mode: string;
+  enabled: boolean;
+  archivedCount: number;
+  lastArchivedWal: string | null;
+  lastArchivedTime: string | null;
+  lastArchivedAgeSec: number | null;
+  failedCount: number;
+  lastFailedWal: string | null;
+  lastFailedTime: string | null;
+  readyCount: number | null;
+  failing: boolean;
+}
+
+export interface SynchronousReplication {
+  standbyNames: string;
+  required: number;
+  healthy: number;
+  satisfied: boolean;
+}
+
+export interface StandbyReplay {
+  receiveLsn: string | null;
+  replayLsn: string | null;
+  replayGapBytes: number;
+  lastReplayAt: string | null;
+  replayDelaySec: number | null;
+  paused: boolean;
+}
+
+export interface TableBloatEntry {
+  schemaName: string;
+  tableName: string;
+  tableBytes: number;
+  wastedBytes: number;
+  wastedPct: number;
+  deadTuplePct: number;
+  freePct: number | null;
+  scannedPct: number | null;
+  method: "pgstattuple_approx" | "dead_tuples" | "skipped_large" | "failed";
+}
+
+export interface TableBloatReport {
+  method: "pgstattuple_approx" | "dead_tuples";
+  extensionInstalled: boolean;
+  canExecute: boolean;
+  installCommand: string;
+  grantCommand: string | null;
+  measuredAt: string;
+  durationMs: number;
+  tables: TableBloatEntry[];
 }
 
 export interface ReplicationSnapshot {
@@ -240,7 +301,13 @@ export interface ReplicationSnapshot {
     receivedLsn: string | null;
     latencyMs: number | null;
     lastMsgReceiptTime: string | null;
+    senderHost?: string | null;
+    senderPort?: number | null;
+    slotName?: string | null;
   } | null;
+  standby?: StandbyReplay | null;
+  synchronous?: SynchronousReplication | null;
+  archiver?: ArchiverStatus;
 }
 
 export interface AlertRule {
@@ -537,6 +604,8 @@ export interface HealthFactor {
   status: "ok" | "info" | "warning" | "critical";
   impact: number;
   detail?: string;
+  code?: string;
+  params?: Record<string, string | number>;
 }
 
 export interface HealthScoreReport {

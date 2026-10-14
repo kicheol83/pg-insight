@@ -116,4 +116,132 @@ export const replication = {
     en: "Last reply: {time}",
     uz: "Oxirgi javob: {time}",
   },
+  "replication.syncTitle": {
+    ko: "동기 복제",
+    en: "Synchronous replication",
+    uz: "Sinxron replikatsiya",
+  },
+  "replication.syncSubtitle": {
+    ko: "커밋이 기다리는 standby 정족수",
+    en: "Standby quorum that commits wait for",
+    uz: "Commit'lar kutadigan standby kvorumi",
+  },
+  "replication.syncSatisfied": {
+    ko: "정족수 충족",
+    en: "Quorum met",
+    uz: "Kvorum bor",
+  },
+  "replication.syncBlocked": {
+    ko: "커밋 대기 중",
+    en: "Commits blocked",
+    uz: "Commit'lar kutmoqda",
+  },
+  "replication.syncAsync": { ko: "비동기", en: "Asynchronous", uz: "Asinxron" },
+  "replication.syncHealthy": {
+    ko: "응답 중인 동기 standby / 필요 수",
+    en: "Responding sync standbys / required",
+    uz: "Javob berayotgan sinxron standby / kerakli",
+  },
+  "replication.syncBlockedHint": {
+    ko: "필요한 수의 동기 standby가 응답하지 않아 새 커밋이 확인 응답을 받지 못하고 기다립니다.",
+    en: "Not enough synchronous standbys are responding, so new commits wait without being acknowledged.",
+    uz: "Yetarli sinxron standby javob bermayapti, shuning uchun yangi commit'lar tasdiqlanmay kutib qoladi.",
+  },
+  "replication.syncAsyncHint": {
+    ko: "synchronous_standby_names가 비어 있습니다. 장애 시 확인 응답한 커밋이 유실될 수 있습니다.",
+    en: "synchronous_standby_names is empty. Acknowledged commits can be lost on failover.",
+    uz: "synchronous_standby_names bo'sh. Failover'da tasdiqlangan commit'lar yo'qolishi mumkin.",
+  },
+  "replication.standbyTitle": {
+    ko: "Standby 재생 상태",
+    en: "Standby replay",
+    uz: "Standby replay holati",
+  },
+  "replication.standbySubtitle": {
+    ko: "받은 WAL과 적용한 WAL의 차이",
+    en: "Gap between received and applied WAL",
+    uz: "Qabul qilingan va qo'llangan WAL farqi",
+  },
+  "replication.replayPaused": {
+    ko: "재생 일시 정지",
+    en: "Replay paused",
+    uz: "Replay pauzada",
+  },
+  "replication.receiverMissing": {
+    ko: "receiver 없음",
+    en: "no receiver",
+    uz: "receiver yo'q",
+  },
+  "replication.upstream": { ko: "업스트림", en: "Upstream", uz: "Upstream" },
+  "replication.receiveLsn": {
+    ko: "받은 LSN",
+    en: "Received LSN",
+    uz: "Qabul qilingan LSN",
+  },
+  "replication.replayLsn": {
+    ko: "적용한 LSN",
+    en: "Replayed LSN",
+    uz: "Qo'llangan LSN",
+  },
+  "replication.replayGap": {
+    ko: "적용 대기 WAL",
+    en: "WAL waiting to be applied",
+    uz: "Qo'llanishini kutayotgan WAL",
+  },
+  "replication.lastReplayedTx": {
+    ko: "마지막으로 적용한 트랜잭션",
+    en: "Last replayed transaction",
+    uz: "Oxirgi qo'llangan tranzaksiya",
+  },
+  "replication.archiveTitle": {
+    ko: "WAL 아카이빙",
+    en: "WAL archiving",
+    uz: "WAL arxivlash",
+  },
+  "replication.archiveSubtitle": {
+    ko: "PITR이 가능하려면 끊기지 않아야 합니다",
+    en: "Must stay unbroken for point-in-time recovery",
+    uz: "PITR uchun uzilmasligi kerak",
+  },
+  "replication.archiveOk": { ko: "정상", en: "Healthy", uz: "Sog'lom" },
+  "replication.archiveFailing": {
+    ko: "실패 중",
+    en: "Failing",
+    uz: "Ishlamayapti",
+  },
+  "replication.archiveOff": {
+    ko: "꺼짐 ({mode})",
+    en: "Off ({mode})",
+    uz: "O'chiq ({mode})",
+  },
+  "replication.archiveOnPrimary": {
+    ko: "primary가 담당",
+    en: "Done by the primary",
+    uz: "Primary bajaradi",
+  },
+  "replication.archivedCount": {
+    ko: "아카이브된 세그먼트",
+    en: "Archived segments",
+    uz: "Arxivlangan segmentlar",
+  },
+  "replication.lastArchived": {
+    ko: "마지막 아카이브",
+    en: "Last archived",
+    uz: "Oxirgi arxivlangan",
+  },
+  "replication.archiveFailed": {
+    ko: "실패 횟수",
+    en: "Failures",
+    uz: "Xatolar soni",
+  },
+  "replication.archiveReady": {
+    ko: "아카이브 대기 (.ready)",
+    en: "Waiting to archive (.ready)",
+    uz: "Arxivlanishini kutmoqda (.ready)",
+  },
+  "replication.archiveReadyUnknown": {
+    ko: "pg_monitor 권한 필요",
+    en: "needs pg_monitor",
+    uz: "pg_monitor kerak",
+  },
 } satisfies Dictionary;

@@ -33,6 +33,7 @@ import { liveApi, metricsApi } from "@/api/endpoints";
 import { fmtBytes, tickTime, cn } from "@/lib/format";
 import { lagColor } from "@/lib/colors";
 import { ReplicaCard } from "./ReplicaCard";
+import { ReplicationHealthCards } from "./ReplicationHealthCards";
 import type { ReplicationSlot } from "@/types/model";
 import { useI18n } from "@/i18n";
 
@@ -137,6 +138,8 @@ export default function ReplicationPage() {
           </Card>
         </div>
 
+        {data && <ReplicationHealthCards data={data} />}
+
         <Card className="mb-5">
           <CardHeader
             title={t("replication.lagTrend")}
@@ -209,7 +212,7 @@ export default function ReplicationPage() {
                       </span>{" "}
                       <span className="text-primary font-medium">
                         {data.receiverInfo.latencyMs !== null
-                          ? `${data.receiverInfo.latencyMs}ms`
+                          ? `${Math.round(data.receiverInfo.latencyMs)}ms`
                           : "—"}
                       </span>
                     </div>
@@ -306,6 +309,11 @@ export default function ReplicationPage() {
                         )}
                       >
                         {fmtBytes(s.walBytes)}
+                        {s.walStatus && (
+                          <div className="text-[10px] text-muted font-normal">
+                            {s.walStatus}
+                          </div>
+                        )}
                       </span>
                     ),
                   },

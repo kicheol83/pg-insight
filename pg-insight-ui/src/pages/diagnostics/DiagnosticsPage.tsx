@@ -1,15 +1,3 @@
-// ══════════════════════════════════════════════════════════════
-// src/pages/diagnostics/DiagnosticsPage.tsx
-//
-// PG Insight open source — har kimning PostgreSQL muhiti boshqacha
-// (versiya, ruxsatlar, extension'lar). Shu sabab target ulanganda
-// yoki muammoga uchraganda foydalanuvchi buzilgan sahifalar bilan
-// qolib ketmasin deb, shu sahifaga yo'naltiriladi: har bir muammo
-// oddiy tilda tushuntiriladi va aniq tuzatish buyrug'i (nusxalash
-// tugmasi bilan) ko'rsatiladi. Muammolar hal bo'lgach — "Davom
-// etish" tugmasi orqali asosiy sahifalarga o'tish mumkin.
-// ══════════════════════════════════════════════════════════════
-
 import { useNavigate } from "react-router-dom";
 import {
   CheckCircle2,
@@ -39,7 +27,7 @@ import { useQuery } from "@/hooks/useQuery";
 import { useActiveTarget } from "@/store/app";
 import { liveApi } from "@/api/endpoints";
 import { cn } from "@/lib/format";
-import { useI18n, type MessageKey } from "@/i18n";
+import { useI18n, isMessageKey, type MessageKey } from "@/i18n";
 import type {
   DiagnosticCheck,
   HealthFactor,
@@ -130,24 +118,37 @@ function HealthFactorStatusIcon({
   return <XCircle size={14} className="text-red-400 shrink-0" />;
 }
 
+function formatFactorParams(params: HealthFactor["params"]) {
+  if (!params) return undefined;
+  return Object.fromEntries(
+    Object.entries(params).map(([k, v]) => [
+      k,
+      typeof v === "number" && Math.abs(v) >= 10_000 ? v.toLocaleString() : v,
+    ]),
+  );
+}
+
 function HealthFactorRow({ factor }: { factor: HealthFactor }) {
+  const { t } = useI18n();
+  const labelKey = `health.${factor.id}.label`;
+  const detailKey = factor.code ? `health.${factor.id}.${factor.code}` : "";
+  const label = isMessageKey(labelKey) ? t(labelKey) : factor.label;
+  const detail = isMessageKey(detailKey)
+    ? t(detailKey, formatFactorParams(factor.params))
+    : factor.detail;
   return (
     <div className="flex items-start gap-2.5 py-2 border-b border-[var(--border)] last:border-0">
       <HealthFactorStatusIcon status={factor.status} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium text-primary">
-            {factor.label}
-          </span>
+          <span className="text-xs font-medium text-primary">{label}</span>
           {factor.impact < 0 && (
             <span className="text-xs mono text-red-400 font-medium shrink-0">
               {factor.impact}
             </span>
           )}
         </div>
-        {factor.detail && (
-          <p className="text-[11px] text-muted mt-0.5">{factor.detail}</p>
-        )}
+        {detail && <p className="text-[11px] text-muted mt-0.5">{detail}</p>}
       </div>
     </div>
   );
