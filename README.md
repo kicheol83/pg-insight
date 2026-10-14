@@ -81,6 +81,10 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
 `pg_stat_statements`는 `shared_preload_libraries` 설정 후 재시작이 필요합니다.
 
+## 복제 클러스터 테스트
+
+복제 화면은 Docker로 띄운 3노드 클러스터(PostgreSQL 17, repmgr primary 1 + standby 2, pgBackRest)에서 확인했습니다.
+
 ## 테스트
 
 ```powershell
@@ -90,7 +94,7 @@ cd ..\pg-insight-ui
 npx vitest run
 ```
 
-Backend 188개, Frontend 49개.
+Backend 252개, Frontend 50개.
 
 ## 배포
 
