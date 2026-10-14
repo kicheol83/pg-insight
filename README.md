@@ -94,7 +94,7 @@ cd ..\pg-insight-ui
 npx vitest run
 ```
 
-Backend 252개, Frontend 50개.
+Backend 252개(실제 DB가 필요한 12개 포함), Frontend 50개. 실제 DB가 필요한 테스트는 `TEST_TARGET_DATABASE_URL`이 있을 때만 실행됩니다.
 
 ## 배포
 
