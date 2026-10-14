@@ -1,14 +1,3 @@
-// ══════════════════════════════════════════════════════════════
-// src/pages/database/DatabasePage.tsx
-//
-// "PostgreSQL DBA를 위한 Admin 이야기" kitobining 1.2-bobi -
-// 데이터베이스 모니터링 (Database monitoring) - pg_stat_database
-// asosida. Bu sahifa Connections/Locks kabi session yoki obyekt
-// darajasida emas, BUTUN DATABASE darajasidagi kumulyativ
-// hisoblagichlarni ko'rsatadi: commit/rollback nisbati, cache hit,
-// temp file'ga tushib ketgan operatsiyalar, deadlock'lar.
-// ══════════════════════════════════════════════════════════════
-
 import { Database, RefreshCw, AlertTriangle, Clock } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { PageContent } from "@/components/layout/AppLayout";
@@ -99,7 +88,6 @@ export default function DatabasePage() {
           )}
         </div>
 
-        {/* Umumiy statistika */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
           <Card padding="sm">
             <div className="text-[10px] text-muted uppercase tracking-wide mb-1">
@@ -181,7 +169,6 @@ export default function DatabasePage() {
           </Card>
         )}
 
-        {/* Har bir database uchun batafsil kartalar */}
         <div className="space-y-4">
           {(data?.databases ?? []).map((db) => (
             <Card key={db.name}>

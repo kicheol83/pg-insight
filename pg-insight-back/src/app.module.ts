@@ -1,7 +1,3 @@
-// ══════════════════════════════════════════════════════════════
-// src/app.module.ts - barcha modullarni bog'laydigan root module
-// ══════════════════════════════════════════════════════════════
-
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';

@@ -158,8 +158,6 @@ export class TargetsController {
     return this.targetsService.findOne(id, user.id, user.role);
   }
 
-  // POST /targets/test - connection test (SAQLASHDAN OLDIN)
-  // :id bo'lmasin deb /test birinchi keladi
   @Post('test')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -173,7 +171,6 @@ export class TargetsController {
     return this.targetsService.testConnection(dto, user.role === 'admin');
   }
 
-  // POST /targets - create
   @Post()
   @ApiOperation({
     summary: 'Add a new PostgreSQL target',

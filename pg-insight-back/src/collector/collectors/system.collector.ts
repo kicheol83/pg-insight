@@ -78,7 +78,7 @@ export interface SystemSnapshot {
   keySettings: Record<string, string>;
   allSettings: PgSetting[];
 
-  totalDatabaseSize: number; // bytes
+  totalDatabaseSize: number;
   databaseCount: number;
   extensionCount: number;
   superuserCount: number;

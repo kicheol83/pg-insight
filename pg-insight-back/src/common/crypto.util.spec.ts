@@ -15,7 +15,6 @@ describe('crypto.util', () => {
       const a = encrypt(plaintext, secret);
       const b = encrypt(plaintext, secret);
       expect(a).not.toBe(b);
-      // Lekin ikkalasi ham to'g'ri dekodlanishi kerak
       expect(decrypt(a, secret)).toBe(plaintext);
       expect(decrypt(b, secret)).toBe(plaintext);
     });
@@ -35,8 +34,8 @@ describe('crypto.util', () => {
       const ciphertext = encrypt('test', secret);
       const parts = ciphertext.split(':');
       expect(parts).toHaveLength(3);
-      expect(parts[0]).toMatch(/^[0-9a-f]{32}$/); // 16 byte IV
-      expect(parts[1]).toMatch(/^[0-9a-f]{32}$/); // 16 byte auth tag
+      expect(parts[0]).toMatch(/^[0-9a-f]{32}$/);
+      expect(parts[1]).toMatch(/^[0-9a-f]{32}$/);
     });
   });
 

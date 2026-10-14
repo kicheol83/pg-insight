@@ -1,12 +1,3 @@
-// ══════════════════════════════════════════════════════════════
-// maintenance.service.spec.ts
-//
-// Bu - loyihaning YOZUV amali bajaradigan birinchi maintenance
-// endpointi, shuning uchun xavfsizlik chegaralari (mavjud emaslik,
-// eskirgan "unused" ma'lumot, constraint himoyasi) ayniqsa
-// sinchiklab tekshiriladi.
-// ══════════════════════════════════════════════════════════════
-
 import { Test } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { MaintenanceService } from './maintenance.service';
@@ -46,8 +37,8 @@ describe('MaintenanceService', () => {
 
     it('runs VACUUM (ANALYZE) with a properly quoted identifier once existence is confirmed', async () => {
       poolManager.query
-        .mockResolvedValueOnce([{ exists: true }]) // existence check
-        .mockResolvedValueOnce([]); // the VACUUM itself
+        .mockResolvedValueOnce([{ exists: true }])
+        .mockResolvedValueOnce([]);
 
       const result = await service.vacuumTable(
         't1',
@@ -71,7 +62,7 @@ describe('MaintenanceService', () => {
     it('records a completion audit entry once the background VACUUM finishes', async () => {
       poolManager.query
         .mockResolvedValueOnce([{ exists: true }])
-        .mockResolvedValueOnce([]); // VACUUM succeeds
+        .mockResolvedValueOnce([]);
 
       await service.vacuumTable('t1', 'public', 'events', 'u1', 'a@b.com');
       await flushPromises();
@@ -100,9 +91,6 @@ describe('MaintenanceService', () => {
     });
 
     it('never sends the raw table name from the request directly into an unquoted SQL string', async () => {
-      // Nazariy jihatdan "zararli" nom - lekin identifikator DTO
-      // darajasida allaqachon regex bilan cheklangan (controller),
-      // bu yerda faqat quoteIdent to'g'ri ishlatilganini tasdiqlaymiz
       poolManager.query
         .mockResolvedValueOnce([{ exists: true }])
         .mockResolvedValueOnce([]);
@@ -124,8 +112,8 @@ describe('MaintenanceService', () => {
 
     it('re-verifies usage server-side and refuses to drop an index that has since been used', async () => {
       poolManager.query
-        .mockResolvedValueOnce([{ exists: true }]) // existence check
-        .mockResolvedValueOnce([{ idx_scan: '42' }]); // re-check - NOW being used!
+        .mockResolvedValueOnce([{ exists: true }])
+        .mockResolvedValueOnce([{ idx_scan: '42' }]);
 
       await expect(
         service.dropUnusedIndex('t1', 'public', 'idx_events', 'u1', 'a@b.com'),
@@ -134,9 +122,9 @@ describe('MaintenanceService', () => {
 
     it('refuses to drop an index that backs a constraint (primary key / unique)', async () => {
       poolManager.query
-        .mockResolvedValueOnce([{ exists: true }]) // existence check
-        .mockResolvedValueOnce([{ idx_scan: '0' }]) // still unused
-        .mockResolvedValueOnce([{ exists: true }]); // BUT backs a constraint
+        .mockResolvedValueOnce([{ exists: true }])
+        .mockResolvedValueOnce([{ idx_scan: '0' }])
+        .mockResolvedValueOnce([{ exists: true }]);
 
       await expect(
         service.dropUnusedIndex('t1', 'public', 'events_pkey', 'u1', 'a@b.com'),
@@ -147,8 +135,8 @@ describe('MaintenanceService', () => {
       poolManager.query
         .mockResolvedValueOnce([{ exists: true }])
         .mockResolvedValueOnce([{ idx_scan: '0' }])
-        .mockResolvedValueOnce([{ exists: false }]) // not a constraint
-        .mockResolvedValueOnce([]); // the DROP INDEX itself
+        .mockResolvedValueOnce([{ exists: false }])
+        .mockResolvedValueOnce([]);
 
       const result = await service.dropUnusedIndex(
         't1',

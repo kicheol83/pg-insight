@@ -159,7 +159,6 @@ export default function ConnectionsPage() {
           )}
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
           {[
             {
@@ -209,7 +208,6 @@ export default function ConnectionsPage() {
           ))}
         </div>
 
-        {/* Utilization bar */}
         <Card padding="sm" className="mb-5">
           <div className="flex items-center gap-4">
             <div className="shrink-0">
@@ -260,7 +258,6 @@ export default function ConnectionsPage() {
           </div>
         </Card>
 
-        {/* Trend + by app */}
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-5 mb-5">
           <Card className="xl:col-span-3">
             <CardHeader
@@ -336,7 +333,6 @@ export default function ConnectionsPage() {
           </Card>
         </div>
 
-        {/* Sessions table */}
         <Card>
           <div className="flex items-center gap-3 mb-4 flex-wrap">
             <CardHeader

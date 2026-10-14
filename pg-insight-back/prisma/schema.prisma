@@ -10,7 +10,7 @@ model User {
   id           String   @id @default(uuid())
   email        String   @unique
   passwordHash String
-  role         String   @default("user") // admin | user
+  role         String   @default("user")
   createdAt    DateTime @default(now())
   lastLoginAt  DateTime?
 
@@ -50,7 +50,7 @@ model Target {
   createdByUserId   String?
   createdByUser     User?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
-  status            String    @default("connecting") // connecting|active|error|paused
+  status            String    @default("connecting")
   errorMessage      String?
   lastConnectedAt   DateTime?
   lastCollectedAt   DateTime?
@@ -60,7 +60,6 @@ model Target {
   hasStatStatements Boolean   @default(false)       
   hasTimescaledb    Boolean   @default(false)      
 
-  // Collection intervals (ms) - per-target override possible
   collectionIntervalMs Int    @default(5000)
   slowQueryThresholdMs Int    @default(1000)
 
@@ -68,7 +67,6 @@ model Target {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  // Relations
   alertRules        AlertRule[]
   alertEvents       AlertEvent[]
   collectionLogs    CollectionLog[]
@@ -78,15 +76,14 @@ model Target {
   @@map("targets")
 }
 
-// ── Backup
 
 model Backup {
   id                String    @id @default(uuid())
   targetId          String
   target            Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
 
-  status            String    @default("running") // running | completed | failed
-  format            String    @default("custom")  // pg_dump -Fc (custom format - compression + selective restore)
+  status            String    @default("running")
+  format            String    @default("custom")
   filePath          String?                        
   fileSizeBytes      BigInt?
   errorMessage      String?
@@ -123,10 +120,10 @@ model CollectionLog {
   id           String   @id @default(uuid())
   targetId     String
   collectedAt  DateTime @default(now())
-  durationMs   Int                        // qancha vaqt ketdi
-  status       String                     // success | error | timeout
+  durationMs   Int
+  status       String
   errorMessage String?
-  metricsCount Int      @default(0)       // nechta metrik yozildi
+  metricsCount Int      @default(0)
 
   target Target @relation(fields: [targetId], references: [id], onDelete: Cascade)
 
@@ -143,8 +140,8 @@ model AlertRule {
   metric      String
   operator    String
   threshold   Float
-  severity    String  @default("warning")  // info|warning|critical
-  cooldownMs  Int     @default(300000)     // 5 daqiqa default cooldown
+  severity    String  @default("warning")
+  cooldownMs  Int     @default(300000)
   enabled     Boolean @default(true)
 
   notifyChannels String[] @default([])
@@ -165,9 +162,9 @@ model AlertEvent {
   ruleId       String
   triggeredAt  DateTime  @default(now())
   resolvedAt   DateTime?
-  currentValue Float                      // trigger paytidagi qiymat
+  currentValue Float
   message      String?
-  acknowledged Boolean   @default(false) // ko'rib chiqilganmi
+  acknowledged Boolean   @default(false)
 
   target Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
   rule   AlertRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)

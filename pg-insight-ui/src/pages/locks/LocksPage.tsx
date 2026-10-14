@@ -81,7 +81,6 @@ export default function LocksPage() {
           )}
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
           <Card padding="sm">
             <StatBox
@@ -128,7 +127,6 @@ export default function LocksPage() {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          {/* Chains */}
           <div className="xl:col-span-2">
             <Card>
               <CardHeader
@@ -165,7 +163,6 @@ export default function LocksPage() {
             </Card>
           </div>
 
-          {/* Lock modes */}
           <Card>
             <CardHeader
               title={t("locks.lockModes")}

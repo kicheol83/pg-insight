@@ -96,7 +96,7 @@ describe("truncateSql", () => {
   it("truncates long queries with an ellipsis", () => {
     const long = "SELECT " + "a".repeat(200);
     const result = truncateSql(long, 50);
-    expect(result.length).toBe(51); // 50 chars + ellipsis
+    expect(result.length).toBe(51);
     expect(result.endsWith("…")).toBe(true);
   });
 });

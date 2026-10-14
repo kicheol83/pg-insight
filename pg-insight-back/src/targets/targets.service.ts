@@ -82,7 +82,7 @@ export class TargetsService {
 
     if (this.encryptionKey === 'default-dev-key-change-in-production') {
       this.logger.warn(
-        '⚠️  Using default encryption key! Set ENCRYPTION_KEY env variable in production.',
+        'Using the default encryption key; set ENCRYPTION_KEY in production',
       );
     }
   }
@@ -181,7 +181,6 @@ export class TargetsService {
       );
     }
 
-    // 2. Duplicate check
     const db = this.prisma as unknown as Record<string, unknown>;
     const existing = await (
       db['target'] as {
@@ -301,7 +300,7 @@ export class TargetsService {
       data: { isActive: false, status: 'paused' },
     });
 
-    this.logger.log(`🗑  Target removed: ${id.slice(0, 8)}`);
+    this.logger.log(`Target removed: ${id.slice(0, 8)}`);
     return { message: `Target ${id} removed` };
   }
 
