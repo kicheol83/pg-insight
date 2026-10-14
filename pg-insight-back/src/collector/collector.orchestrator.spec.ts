@@ -51,6 +51,7 @@ describe('CollectorOrchestrator error handling', () => {
       unused,
       unused,
       config as never,
+      unused,
     );
 
     internals = orchestrator as unknown as typeof internals;

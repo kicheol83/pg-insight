@@ -19,26 +19,11 @@ import {
   IsNumber,
   IsOptional,
   IsArray,
+  ArrayMaxSize,
   MaxLength,
+  Min,
 } from 'class-validator';
-import { AlertEngineService } from './alert-engine.service';
-
-const METRIC_NAMES = [
-  'connection_utilization_pct',
-  'active_queries',
-  'idle_in_transaction',
-  'waiting_locks',
-  'longest_query_ms',
-  'blocked_sessions',
-  'deadlocks_delta',
-  'cache_hit_ratio',
-  'replication_lag_bytes',
-  'xid_age',
-  'table_bloat_ratio',
-  'unused_index_size',
-  'wal_size_bytes',
-  'slow_query_count',
-] as const;
+import { AlertEngineService, ALERT_METRIC_NAMES } from './alert-engine.service';
 
 export class CreateAlertRuleDto {
   @IsString()
@@ -46,7 +31,7 @@ export class CreateAlertRuleDto {
   @MaxLength(100)
   name!: string;
 
-  @IsIn(METRIC_NAMES)
+  @IsIn(ALERT_METRIC_NAMES)
   metric!: string;
 
   @IsIn(['gt', 'gte', 'lt', 'lte'])
@@ -60,10 +45,14 @@ export class CreateAlertRuleDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   cooldownMs?: number;
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(5)
+  @IsString({ each: true })
+  @MaxLength(2000, { each: true })
   notifyChannels?: string[];
 }
 
@@ -75,7 +64,7 @@ export class AlertsController {
   @Get(':targetId/rules')
   @ApiOperation({ summary: 'Get all alert rules for a target' })
   @ApiParam({ name: 'targetId' })
- public async getRules(@Param('targetId') targetId: string) {
+  public async getRules(@Param('targetId') targetId: string) {
     return this.alertEngine.getRules(targetId);
   }
 
@@ -85,6 +74,7 @@ export class AlertsController {
     @Param('targetId') targetId: string,
     @Body() dto: CreateAlertRuleDto,
   ) {
+    await this.alertEngine.validateNotifyChannels(dto.notifyChannels ?? []);
     return this.alertEngine.createRule({
       targetId,
       name: dto.name,

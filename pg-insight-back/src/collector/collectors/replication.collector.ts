@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Pool } from 'pg';
 import { BaseCollector } from '../base.collector';
 import { TargetPoolManager } from '../../targets/target-pool.manager';
+import { parseRequiredSyncStandbys } from '../../live/live-query.service';
 
 export interface ReplicaInfo {
   pid: number;
@@ -29,6 +30,7 @@ export interface ReplicaInfo {
   replayLagMs: number | null;
 
   replyTime: Date | null;
+  replyAgeSec: number | null;
 }
 
 export interface ReplicationSlot {
@@ -55,11 +57,17 @@ export interface ReplicationSnapshot {
 
   replicas: ReplicaInfo[];
   maxLagBytes: number;
-  hasLaggedReplicas: boolean; // > 100MB lag
+  hasLaggedReplicas: boolean;
 
   slots: ReplicationSlot[];
   hasInactiveSlots: boolean;
   totalWalRetained: number;
+
+  syncRequired: number;
+  syncHealthy: number;
+  archiveFailing: boolean;
+  archiveReadyCount: number | null;
+  maxInactiveSlotWalBytes: number;
 
   receiverInfo: {
     status: string;
@@ -71,8 +79,9 @@ export interface ReplicationSnapshot {
   } | null;
 }
 
-const LAG_WARNING_BYTES = 50 * 1024 * 1024; // 50MB
-const LAG_CRITICAL_BYTES = 200 * 1024 * 1024; // 200MB
+const LAG_WARNING_BYTES = 50 * 1024 * 1024;
+const LAG_CRITICAL_BYTES = 200 * 1024 * 1024;
+const SYNC_REPLY_MAX_AGE_SEC = 10;
 
 @Injectable()
 export class ReplicationCollector extends BaseCollector<ReplicationSnapshot> {
@@ -87,26 +96,32 @@ export class ReplicationCollector extends BaseCollector<ReplicationSnapshot> {
     pool: Pool,
     _targetId: string,
   ): Promise<ReplicationSnapshot> {
-    const isPrimaryResult = await pool.query<{ is_primary: boolean }>(
-      `SELECT pg_is_in_recovery() = FALSE AS is_primary`,
+    const isPrimaryResult = await pool.query<{
+      is_primary: boolean;
+      sync_names: string;
+      archive_mode: string;
+    }>(
+      `SELECT pg_is_in_recovery() = FALSE AS is_primary,
+        current_setting('synchronous_standby_names') AS sync_names,
+        current_setting('archive_mode') AS archive_mode`,
     );
     const isPrimary = isPrimaryResult.rows[0].is_primary;
+    const syncNames = String(isPrimaryResult.rows[0].sync_names ?? '');
+    const archiveMode = String(isPrimaryResult.rows[0].archive_mode ?? 'off');
 
     const [replicas, slots, receiverInfo] = await Promise.all([
       isPrimary ? this.getReplicaStats(pool) : Promise.resolve([]),
-      this.getReplicationSlots(pool),
+      this.getReplicationSlots(pool, isPrimary),
       isPrimary ? Promise.resolve(null) : this.getReceiverInfo(pool),
     ]);
 
-    const lsnResult = await pool.query<{ lsn: string; wal_bytes: string }>(`
+    const lsnResult = isPrimary
+      ? await pool.query<{ lsn: string; wal_bytes: string }>(`
       SELECT
-        pg_current_wal_lsn()::TEXT   AS lsn,
-        -- WAL directory size (approximation)
-        pg_wal_lsn_diff(
-          pg_current_wal_lsn(),
-          '0/0'
-        )                            AS wal_bytes
-    `);
+        pg_current_wal_lsn()::TEXT AS lsn,
+        pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0') AS wal_bytes
+    `)
+      : { rows: [] as { lsn: string; wal_bytes: string }[] };
 
     const maxLagBytes = replicas.reduce(
       (max, r) => Math.max(max, r.totalLagBytes),
@@ -119,6 +134,19 @@ export class ReplicationCollector extends BaseCollector<ReplicationSnapshot> {
         `Inactive replication slot retaining ${(totalWalRetained / 1024 / 1024).toFixed(0)}MB of WAL`,
       );
     }
+
+    const syncRequired = isPrimary ? parseRequiredSyncStandbys(syncNames) : 0;
+    const syncHealthy = replicas.filter(
+      (r) =>
+        (r.syncState === 'sync' || r.syncState === 'quorum') &&
+        r.state === 'streaming' &&
+        r.replyAgeSec !== null &&
+        r.replyAgeSec <= SYNC_REPLY_MAX_AGE_SEC,
+    ).length;
+    const archive = await this.getArchiveState(
+      pool,
+      archiveMode === 'always' || (archiveMode === 'on' && isPrimary),
+    );
 
     return {
       isPrimary,
@@ -133,7 +161,38 @@ export class ReplicationCollector extends BaseCollector<ReplicationSnapshot> {
       slots,
       hasInactiveSlots: slots.some((s) => !s.active),
       totalWalRetained,
+      syncRequired,
+      syncHealthy,
+      archiveFailing: archive.failing,
+      archiveReadyCount: archive.readyCount,
+      maxInactiveSlotWalBytes: slots
+        .filter((s) => !s.active)
+        .reduce((max, s) => Math.max(max, s.walBytes), 0),
       receiverInfo,
+    };
+  }
+
+  private async getArchiveState(
+    pool: Pool,
+    enabled: boolean,
+  ): Promise<{ failing: boolean; readyCount: number | null }> {
+    if (!enabled) return { failing: false, readyCount: null };
+    const stats = await pool
+      .query<{ failing: boolean }>(
+        `SELECT failed_count > 0
+           AND last_failed_time IS NOT NULL
+           AND (last_archived_time IS NULL OR last_failed_time > last_archived_time) AS failing
+         FROM pg_stat_archiver`,
+      )
+      .catch(() => ({ rows: [] as { failing: boolean }[] }));
+    const ready = await pool
+      .query<{ ready: string }>(
+        `SELECT count(*) AS ready FROM pg_ls_archive_statusdir() WHERE name LIKE '%.ready'`,
+      )
+      .catch(() => null);
+    return {
+      failing: Boolean(stats.rows[0]?.failing),
+      readyCount: ready ? Number(ready.rows[0]?.ready) || 0 : null,
     };
   }
 
@@ -155,10 +214,12 @@ export class ReplicationCollector extends BaseCollector<ReplicationSnapshot> {
       write_lag_bytes: string;
       flush_lag_bytes: string;
       replay_lag_bytes: string;
+      total_lag_bytes: string;
       write_lag_ms: string | null;
       flush_lag_ms: string | null;
       replay_lag_ms: string | null;
       reply_time: Date | null;
+      reply_age_s: string | null;
     }>(`
       SELECT
         pid,
@@ -175,7 +236,6 @@ export class ReplicationCollector extends BaseCollector<ReplicationSnapshot> {
         flush_lsn::TEXT,
         replay_lsn::TEXT,
 
-        -- Lag in bytes
         COALESCE(
           pg_wal_lsn_diff(sent_lsn, write_lsn), 0
         ) AS write_lag_bytes,
@@ -185,8 +245,10 @@ export class ReplicationCollector extends BaseCollector<ReplicationSnapshot> {
         COALESCE(
           pg_wal_lsn_diff(sent_lsn, replay_lsn), 0
         ) AS replay_lag_bytes,
+        COALESCE(
+          pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn), 0
+        ) AS total_lag_bytes,
 
-        -- Lag in time (PostgreSQL 10+)
         COALESCE(
           EXTRACT(EPOCH FROM write_lag) * 1000, 0
         )::BIGINT AS write_lag_ms,
@@ -197,7 +259,8 @@ export class ReplicationCollector extends BaseCollector<ReplicationSnapshot> {
           EXTRACT(EPOCH FROM replay_lag) * 1000, 0
         )::BIGINT AS replay_lag_ms,
 
-        reply_time
+        reply_time,
+        EXTRACT(EPOCH FROM (now() - reply_time)) AS reply_age_s
 
       FROM pg_stat_replication
       ORDER BY replay_lag_bytes DESC
@@ -225,16 +288,21 @@ export class ReplicationCollector extends BaseCollector<ReplicationSnapshot> {
         writeLagBytes,
         flushLagBytes,
         replayLagBytes,
-        totalLagBytes: writeLagBytes + flushLagBytes + replayLagBytes,
+        totalLagBytes: parseInt(row.total_lag_bytes, 10) || replayLagBytes,
         writeLagMs: row.write_lag_ms ? parseInt(row.write_lag_ms, 10) : null,
         flushLagMs: row.flush_lag_ms ? parseInt(row.flush_lag_ms, 10) : null,
         replayLagMs: row.replay_lag_ms ? parseInt(row.replay_lag_ms, 10) : null,
         replyTime: row.reply_time,
+        replyAgeSec:
+          row.reply_age_s !== null ? parseFloat(row.reply_age_s) : null,
       };
     });
   }
 
-  private async getReplicationSlots(pool: Pool): Promise<ReplicationSlot[]> {
+  private async getReplicationSlots(
+    pool: Pool,
+    isPrimary: boolean,
+  ): Promise<ReplicationSlot[]> {
     const result = await pool.query<{
       slot_name: string;
       plugin: string | null;
@@ -259,8 +327,6 @@ export class ReplicationCollector extends BaseCollector<ReplicationSnapshot> {
         catalog_xmin::TEXT,
         restart_lsn::TEXT,
         confirmed_flush_lsn::TEXT,
-        -- PostgreSQL 13+ da safe_wal_size mavjud
-        -- Biz approximate qilamiz
         COALESCE(wal_status, 'unknown') AS wal_status
       FROM pg_replication_slots
       ORDER BY active DESC, slot_name
@@ -275,7 +341,7 @@ export class ReplicationCollector extends BaseCollector<ReplicationSnapshot> {
       SELECT
         slot_name,
         COALESCE(
-          pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn),
+          pg_wal_lsn_diff(${isPrimary ? 'pg_current_wal_lsn()' : 'pg_last_wal_receive_lsn()'}, restart_lsn),
           0
         ) AS wal_bytes
       FROM pg_replication_slots
@@ -323,14 +389,13 @@ export class ReplicationCollector extends BaseCollector<ReplicationSnapshot> {
         `
       SELECT
         status,
-        -- conninfo'dan password'ni olib tashlaymiz (security!)
         REGEXP_REPLACE(conninfo, 'password=[^ ]+', 'password=***') AS conninfo,
-        received_lsn::TEXT,
+        COALESCE(to_jsonb(r) ->> 'flushed_lsn', to_jsonb(r) ->> 'received_lsn') AS received_lsn,
         last_msg_send_time,
         last_msg_receipt_time,
         EXTRACT(EPOCH FROM (last_msg_receipt_time - last_msg_send_time))
           * 1000 AS latency_ms
-      FROM pg_stat_wal_receiver
+      FROM pg_stat_wal_receiver r
     `,
       )
       .catch(() => ({ rows: [] as never[] }));
