@@ -9,7 +9,6 @@ import { TargetAccessGuard } from './target-access.guard';
 import { AppModule } from '../app.module';
 import { TARGET_ACCESS_KEY, TargetAccessRule } from './target-access.decorator';
 import { AlertsController } from '../alerts/alerts.controller';
-import { AppController } from '../app.controller';
 import { BackupController } from '../backup/backup.controller';
 import { HealthController } from '../health/health.controller';
 import { LiveController } from '../live/live.controller';
@@ -21,7 +20,6 @@ import { TargetsController } from '../targets/targets.controller';
 const CONTROLLERS: Type[] = [
   AuthController,
   AlertsController,
-  AppController,
   BackupController,
   HealthController,
   LiveController,

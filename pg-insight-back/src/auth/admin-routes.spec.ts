@@ -10,7 +10,6 @@ import { AdminGuard } from './admin.guard';
 import { AuthController } from './auth.controller';
 import { TARGET_ACCESS_KEY } from './target-access.decorator';
 import { AlertsController } from '../alerts/alerts.controller';
-import { AppController } from '../app.controller';
 import { BackupController } from '../backup/backup.controller';
 import { HealthController } from '../health/health.controller';
 import { LiveController } from '../live/live.controller';
@@ -22,7 +21,6 @@ import { TargetsController } from '../targets/targets.controller';
 const CONTROLLERS: Type[] = [
   AuthController,
   AlertsController,
-  AppController,
   BackupController,
   HealthController,
   LiveController,
