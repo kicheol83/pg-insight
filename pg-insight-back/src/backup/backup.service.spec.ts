@@ -350,7 +350,7 @@ describe('BackupService', () => {
 });
 
 function encryptForTest(plaintext: string): string {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { encrypt, getEncryptionKey } = require('../common/crypto.util');
   return encrypt(plaintext, getEncryptionKey());
 }

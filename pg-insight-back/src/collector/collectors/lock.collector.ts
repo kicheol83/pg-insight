@@ -78,7 +78,6 @@ export interface LockSnapshot {
   }>;
 }
 
-
 @Injectable()
 export class LockCollector extends BaseCollector<LockSnapshot> {
   protected readonly logger = new Logger(LockCollector.name);
@@ -213,7 +212,6 @@ export class LockCollector extends BaseCollector<LockSnapshot> {
       query: row.query ?? undefined,
     }));
 
-   
     const chainResult = await pool
       .query<{
         blocker_pid: number;
@@ -333,10 +331,8 @@ export class LockCollector extends BaseCollector<LockSnapshot> {
       if (!chainMap.has(blockerPid)) {
         const maxWaitMs = parseInt(row.blocker_query_ms, 10);
         let severity: BlockingRelation['severity'] = 'low';
-        if (maxWaitMs >= 60_000)
-          severity = 'critical'; 
-        else if (maxWaitMs >= 10_000)
-          severity = 'high'; 
+        if (maxWaitMs >= 60_000) severity = 'critical';
+        else if (maxWaitMs >= 10_000) severity = 'high';
         else if (maxWaitMs >= 3_000) severity = 'medium';
 
         chainMap.set(blockerPid, {
@@ -470,8 +466,8 @@ export class LockCollector extends BaseCollector<LockSnapshot> {
     const inStack = new Set<number>();
 
     const hasCycle = (pid: number): boolean => {
-      if (inStack.has(pid)) return true; 
-      if (visited.has(pid)) return false; 
+      if (inStack.has(pid)) return true;
+      if (visited.has(pid)) return false;
 
       visited.add(pid);
       inStack.add(pid);

@@ -51,6 +51,8 @@ PostgreSQL 모니터링 서비스입니다. 가입한 뒤 자신의 PostgreSQL �
 
 ## 로컬 실행
 
+Node.js 22.13 이상이 필요합니다.
+
 ```powershell
 cd pg-insight-back
 docker compose up -d platform-db metrics-db
@@ -90,11 +92,14 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 ```powershell
 cd pg-insight-back
 npx jest
+npm run test:e2e
+npx eslint "{src,test}/**/*.ts"
 cd ..\pg-insight-ui
 npx vitest run
+npm run lint
 ```
 
-Backend 252개(실제 DB가 필요한 12개 포함), Frontend 50개. 실제 DB가 필요한 테스트는 `TEST_TARGET_DATABASE_URL`이 있을 때만 실행됩니다.
+Backend 254개(실제 DB가 필요한 12개 포함), Frontend 50개. 실제 DB가 필요한 테스트 중 6개는 `TEST_TARGET_DATABASE_URL`, 복제 클러스터 테스트 6개는 `TEST_PRIMARY_DATABASE_URL`과 `TEST_STANDBY_DATABASE_URL`이 있을 때만 실행됩니다. `npm run test:e2e`는 `docker compose`의 DB가 실행 중이어야 합니다.
 
 ## 배포
 

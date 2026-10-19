@@ -24,7 +24,7 @@ export class MaintenanceService {
     userId: string,
     userEmail: string,
   ): Promise<{ started: true; target: string }> {
-    await this.assertRelationExists(targetId, schema, table, 'r'); 
+    await this.assertRelationExists(targetId, schema, table, 'r');
 
     const ident = quoteQualifiedIdent(schema, table);
     const sql = `VACUUM (ANALYZE) ${ident}`;

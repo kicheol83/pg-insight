@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  Wifi,
   RefreshCw,
   Filter,
   XCircle,

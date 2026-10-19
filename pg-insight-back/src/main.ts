@@ -3,7 +3,6 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import type { Request, Response, NextFunction } from 'express';
-import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 
 function protectSwaggerInProduction(

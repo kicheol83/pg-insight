@@ -153,8 +153,6 @@ export class BackupService {
       filePath,
       '--no-password',
     ];
-    if (target.sslMode && target.sslMode !== 'disable') {
-    }
 
     this.logger.log(`Starting pg_dump for target ${target.id} → ${filePath}`);
 

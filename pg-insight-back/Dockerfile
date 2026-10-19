@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps
@@ -6,7 +6,7 @@ COPY . .
 RUN PLATFORM_DATABASE_URL=postgresql://build:build@localhost:5432/build npx prisma generate
 RUN npm run build
 
-FROM node:20-alpine
+FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apk add --no-cache postgresql-client

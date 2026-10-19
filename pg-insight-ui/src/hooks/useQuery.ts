@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 
 export interface QueryState<T> {
   data: T | null;
@@ -20,7 +20,9 @@ export function useQuery<T>(
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
   const fetchRef = useRef(fetchFn);
-  fetchRef.current = fetchFn;
+  useLayoutEffect(() => {
+    fetchRef.current = fetchFn;
+  });
 
   const refetch = useCallback(async () => {
     if (!enabled) return;
@@ -38,6 +40,7 @@ export function useQuery<T>(
   }, [enabled]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refetch();
     if (refreshInterval > 0) {
       const id = setInterval(refetch, refreshInterval);

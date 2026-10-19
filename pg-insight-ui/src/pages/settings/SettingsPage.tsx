@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  Settings,
   RefreshCw,
   Server,
   Database,
