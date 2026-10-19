@@ -87,5 +87,11 @@ describe('crypto.util', () => {
       process.env.NODE_ENV = 'production';
       expect(() => getEncryptionKey()).toThrow(/ENCRYPTION_KEY must be set/);
     });
+
+    it('treats an empty key as unset in production', () => {
+      process.env.ENCRYPTION_KEY = '';
+      process.env.NODE_ENV = 'production';
+      expect(() => getEncryptionKey()).toThrow(/ENCRYPTION_KEY must be set/);
+    });
   });
 });

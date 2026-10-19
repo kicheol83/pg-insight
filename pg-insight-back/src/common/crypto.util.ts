@@ -48,7 +48,7 @@ export function decrypt(ciphertext: string, secret: string): string {
 
 export function getEncryptionKey(): string {
   const key =
-    process.env.ENCRYPTION_KEY ?? 'default-dev-key-change-in-production';
+    process.env.ENCRYPTION_KEY || 'default-dev-key-change-in-production';
   if (
     key === 'default-dev-key-change-in-production' &&
     process.env.NODE_ENV === 'production'
