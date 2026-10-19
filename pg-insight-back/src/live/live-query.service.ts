@@ -138,13 +138,27 @@ export class LiveQueryService {
       };
     }
 
-    const totalRows = await this.poolManager.query<{ total: string }>(
-      targetId,
-      `
-      SELECT count(*) AS total FROM pg_stat_statements
-      WHERE query NOT ILIKE '%pg_stat_statements%'
-    `,
-    );
+    let totalRows: { total: string }[];
+    try {
+      totalRows = await this.poolManager.query<{ total: string }>(
+        targetId,
+        `
+        SELECT count(*) AS total FROM pg_stat_statements
+        WHERE query NOT ILIKE '%pg_stat_statements%'
+      `,
+      );
+    } catch (error) {
+      if ((error as { code?: string }).code === '55000') {
+        return {
+          queries: [],
+          count: 0,
+          total: 0,
+          message:
+            'pg_stat_statements must be loaded via shared_preload_libraries',
+        };
+      }
+      throw error;
+    }
     const total = Number(totalRows[0]?.total) || 0;
 
     const rows = await this.poolManager.query<Record<string, unknown>>(

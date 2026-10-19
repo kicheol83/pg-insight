@@ -226,6 +226,30 @@ describe('LiveQueryService', () => {
       expect(poolManager.query).not.toHaveBeenCalled();
     });
 
+    it('returns empty list with a message when pg_stat_statements is not preloaded', async () => {
+      poolManager.getEntry.mockReturnValue({ hasStatStatements: true });
+      poolManager.query.mockRejectedValueOnce(
+        Object.assign(
+          new Error(
+            'pg_stat_statements must be loaded via "shared_preload_libraries"',
+          ),
+          { code: '55000' },
+        ),
+      );
+      const result = await service.getSlowQueries('target-1');
+      expect(result.queries).toEqual([]);
+      expect(result.total).toBe(0);
+      expect(result.message).toMatch(/shared_preload_libraries/);
+    });
+
+    it('rethrows other errors from pg_stat_statements', async () => {
+      poolManager.getEntry.mockReturnValue({ hasStatStatements: true });
+      poolManager.query.mockRejectedValueOnce(new Error('connection reset'));
+      await expect(service.getSlowQueries('target-1')).rejects.toThrow(
+        'connection reset',
+      );
+    });
+
     it('tags a query as very-slow when mean time exceeds 10s', async () => {
       poolManager.getEntry.mockReturnValue({ hasStatStatements: true });
       poolManager.query
